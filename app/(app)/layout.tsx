@@ -5,6 +5,7 @@ import NotificationsPanel from '@/components/shared/NotificationsPanel'
 import GlobalSearch from '@/components/shared/GlobalSearch'
 import DarkModeToggle from '@/components/shared/DarkModeToggle'
 import KeyboardShortcuts from '@/components/shared/KeyboardShortcuts'
+import AssignTaskButton from '@/components/admin/AssignTaskButton'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -29,7 +30,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 md:px-6 gap-4 pl-14 md:pl-6">
-          <GlobalSearch />
+          <div className="flex items-center gap-3">
+            <GlobalSearch />
+            {role === 'admin' && <AssignTaskButton />}
+          </div>
           <div className="flex items-center gap-1">
             <DarkModeToggle />
             <NotificationsPanel />
