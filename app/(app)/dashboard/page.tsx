@@ -38,7 +38,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const prevYear  = month === 1 ? year - 1 : year
 
   const [{ data: tasks }, { data: profile }, { data: scores }, { data: allScores }, { data: myAwardsRaw }, { data: prevScoreData }] = await Promise.all([
-    supabase.from('tasks').select('*').eq('user_id', user!.id).order('due_date', { ascending: true }),
+    supabase.from('tasks').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
     supabase.from('profiles').select('full_name, role').eq('id', user!.id).single(),
     supabase.from('monthly_scores').select('*').eq('user_id', user!.id).eq('month', month).eq('year', year).single(),
     supabase.from('monthly_scores').select('*').eq('user_id', user!.id).order('year').order('month'),
@@ -62,7 +62,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         .from('tasks')
         .select('*')
         .neq('is_draft', true)
-        .order('due_date', { ascending: true, nullsFirst: false }),
+        .order('created_at', { ascending: false }),
       adminClient
         .from('profiles')
         .select('id, full_name, avatar_url, designation, department'),
@@ -81,12 +81,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     )
     const closedThisMonth = allAdminTasks
       .filter(t => t.status === 'done' && t.due_date && t.due_date >= startOfMonth && t.due_date <= endOfMonth)
-      .sort((a, b) => {
-        // Sort by end date (due_date) descending — most recent end date on top
-        const da = new Date(a.due_date ?? 0).getTime()
-        const db = new Date(b.due_date ?? 0).getTime()
-        return db - da
-      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     const dueToday  = allAdminTasks.filter(t => t.due_date === todayStr && t.status !== 'done')
     const overdueAll = allAdminTasks.filter(t => t.due_date && t.due_date < todayStr && t.status !== 'done')
 
