@@ -38,10 +38,10 @@ export default async function EmailSettingsPage() {
         <EmailSettingCard
           settingKey="admin_daily_task_summary"
           label="Daily Task Summary"
-          description="Sends all admins a single daily email listing every member's tasks due today — split into completed and not-completed — grouped by department."
+          description="Sends all admins a morning email with: active tasks due today with owners, tasks missed yesterday, monthly task load by department, and all pending score approvals."
           role="admin"
           initialEnabled={settings['admin_daily_task_summary']?.enabled ?? false}
-          initialSendTime={settings['admin_daily_task_summary']?.send_time ?? '19:30'}
+          initialSendTime={settings['admin_daily_task_summary']?.send_time ?? '07:30'}
         />
 
         <EmailSettingCard

@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail, dailyTaskSummaryEmailHtml, memberDailyDigestEmailHtml } from '@/lib/email'
+import type { AdminTaskWithOwner, AdminPendingApproval, DeptMonthlyStats } from '@/lib/email'
 import { z } from 'zod'
 
 const schema = z.discriminatedUnion('key', [
@@ -35,44 +36,68 @@ export async function POST(req: NextRequest) {
     const { data: { user: callingUser } } = await supabase.auth.getUser()
     if (!callingUser?.email) return NextResponse.json({ error: 'Could not resolve your email' }, { status: 400 })
 
-    const { data: tasks } = await adminDb
-      .from('tasks')
-      .select('id, title, priority, category, status, score_weight, user_id')
-      .eq('due_date', todayDate)
-      .eq('is_draft', false)
-      .is('parent_task_id', null)
+    const yesterdayIST = new Date(nowIST)
+    yesterdayIST.setDate(yesterdayIST.getDate() - 1)
+    const yesterdayDate = yesterdayIST.toISOString().slice(0, 10)
+    const firstOfMonth = `${todayDate.slice(0, 8)}01`
 
-    const userIds = [...new Set((tasks ?? []).map((t: { user_id: string }) => t.user_id))]
-    let profiles: { id: string; full_name: string; designation: string | null; department: string | null; role: string }[] = []
-    if (userIds.length) {
-      const { data } = await adminDb.from('profiles').select('id, full_name, designation, department, role').in('id', userIds)
-      profiles = data ?? []
-    }
+    const { data: allProfiles } = await adminDb
+      .from('profiles')
+      .select('id, full_name, designation, department, role')
 
-    const memberProfiles = profiles.filter(p => p.role === 'member')
+    const memberProfiles = (allProfiles ?? []).filter(p => p.role === 'member')
     const memberIds = new Set(memberProfiles.map(p => p.id))
+    const profileById = Object.fromEntries(memberProfiles.map(p => [p.id, p]))
 
-    const memberTasks = (tasks ?? []).filter(t => memberIds.has(t.user_id))
-    const completedTasks = memberTasks.filter(t => t.status === 'done')
-    const incompleteTasks = memberTasks.filter(t => t.status !== 'done')
+    const [
+      { data: dueTodayRaw },
+      { data: dueYesterdayRaw },
+      { data: monthlyRaw },
+      { data: pendingApprovalsRaw },
+    ] = await Promise.all([
+      adminDb.from('tasks').select('id, title, priority, category, score_weight, status, due_date, user_id')
+        .eq('due_date', todayDate).neq('status', 'done').eq('is_draft', false).is('parent_task_id', null),
+      adminDb.from('tasks').select('id, title, priority, category, score_weight, status, due_date, user_id')
+        .eq('due_date', yesterdayDate).neq('status', 'done').eq('is_draft', false).is('parent_task_id', null),
+      adminDb.from('tasks').select('id, status, due_date, user_id')
+        .gte('due_date', firstOfMonth).lte('due_date', todayDate).eq('is_draft', false).is('parent_task_id', null),
+      adminDb.from('tasks').select('id, title, priority, score_weight, completion_date, updated_at, user_id')
+        .eq('approval_status', 'pending_approval').eq('status', 'done').eq('is_draft', false).is('parent_task_id', null)
+        .order('completion_date', { ascending: true }),
+    ])
 
-    type MemberData = { full_name: string; designation: string | null; department: string | null; completed: typeof completedTasks; incomplete: typeof incompleteTasks }
-    const memberMap: Record<string, MemberData> = {}
-    for (const p of memberProfiles) memberMap[p.id] = { full_name: p.full_name, designation: p.designation, department: p.department, completed: [], incomplete: [] }
-    for (const t of completedTasks) if (memberMap[t.user_id]) memberMap[t.user_id].completed.push(t)
-    for (const t of incompleteTasks) if (memberMap[t.user_id]) memberMap[t.user_id].incomplete.push(t)
+    const dueTodayTasks: AdminTaskWithOwner[] = (dueTodayRaw ?? [])
+      .filter((t: { user_id: string }) => memberIds.has(t.user_id))
+      .map((t: { user_id: string }) => ({ ...t, owner: profileById[t.user_id] ?? null }))
+      .sort((a: AdminTaskWithOwner, b: AdminTaskWithOwner) => (a.owner?.full_name ?? '').localeCompare(b.owner?.full_name ?? ''))
 
-    const byDept: Record<string, MemberData[]> = {}
-    for (const id of Object.keys(memberMap)) {
-      const m = memberMap[id]
-      if (m.completed.length + m.incomplete.length === 0) continue
-      const dept = m.department ?? 'No Department'
-      if (!byDept[dept]) byDept[dept] = []
-      byDept[dept].push(m)
+    const overdueYesterdayTasks: AdminTaskWithOwner[] = (dueYesterdayRaw ?? [])
+      .filter((t: { user_id: string }) => memberIds.has(t.user_id))
+      .map((t: { user_id: string }) => ({ ...t, owner: profileById[t.user_id] ?? null }))
+      .sort((a: AdminTaskWithOwner, b: AdminTaskWithOwner) => (a.owner?.full_name ?? '').localeCompare(b.owner?.full_name ?? ''))
+
+    const deptStatsMap: Record<string, { total: number; done: number; pending: number }> = {}
+    for (const t of (monthlyRaw ?? []).filter((t: { user_id: string }) => memberIds.has(t.user_id))) {
+      const dept = profileById[t.user_id]?.department ?? 'No Department'
+      if (!deptStatsMap[dept]) deptStatsMap[dept] = { total: 0, done: 0, pending: 0 }
+      deptStatsMap[dept].total++
+      if (t.status === 'done') deptStatsMap[dept].done++
+      else deptStatsMap[dept].pending++
     }
-    for (const dept of Object.keys(byDept)) byDept[dept].sort((a, b) => a.full_name.localeCompare(b.full_name))
+    const monthlyByDept: DeptMonthlyStats[] = Object.entries(deptStatsMap)
+      .map(([department, s]) => ({ department, ...s }))
+      .sort((a, b) => a.department.localeCompare(b.department))
 
-    const html = dailyTaskSummaryEmailHtml(dateLabel, byDept, completedTasks.length, incompleteTasks.length, appUrl)
+    const pendingApprovals: AdminPendingApproval[] = (pendingApprovalsRaw ?? [])
+      .filter((t: { user_id: string }) => memberIds.has(t.user_id))
+      .map((t: { id: string; title: string; priority: string; score_weight: number; completion_date: string | null; updated_at: string; user_id: string }) => ({
+        id: t.id, title: t.title, priority: t.priority, score_weight: t.score_weight,
+        submitted_at: t.completion_date ?? t.updated_at,
+        owner: profileById[t.user_id] ?? null,
+      }))
+
+    const monthLabel = nowIST.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+    const html = dailyTaskSummaryEmailHtml({ dateLabel, monthLabel, appUrl, dueTodayTasks, overdueYesterdayTasks, monthlyByDept, pendingApprovals })
     await sendEmail(callingUser.email, `[TEST] Daily Task Summary — ${subjectDate}`, html)
     return NextResponse.json({ success: true, sentTo: callingUser.email })
   }

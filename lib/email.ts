@@ -47,21 +47,41 @@ export function passwordResetEmailHtml(resetUrl: string) {
   `
 }
 
-interface TaskRow {
+// ── Admin Daily Task Summary ─────────────────────────────────────────────────
+
+export interface AdminTaskWithOwner {
   id: string
   title: string
   priority: string
-  category: string | null
-  status: string
+  category?: string | null
   score_weight: number
+  owner?: { full_name: string; designation: string | null; department: string | null } | null
 }
 
-interface MemberGroup {
-  full_name: string
-  designation: string | null
-  department: string | null
-  completed: TaskRow[]
-  incomplete: TaskRow[]
+export interface DeptMonthlyStats {
+  department: string
+  total: number
+  done: number
+  pending: number
+}
+
+export interface AdminPendingApproval {
+  id: string
+  title: string
+  priority: string
+  score_weight: number
+  submitted_at?: string | null
+  owner?: { full_name: string; designation: string | null; department: string | null } | null
+}
+
+export interface DailyTaskSummaryOptions {
+  dateLabel: string
+  monthLabel: string
+  appUrl: string
+  dueTodayTasks: AdminTaskWithOwner[]
+  overdueYesterdayTasks: AdminTaskWithOwner[]
+  monthlyByDept: DeptMonthlyStats[]
+  pendingApprovals: AdminPendingApproval[]
 }
 
 function priorityBadge(p: string) {
@@ -74,116 +94,168 @@ function priorityBadge(p: string) {
   return `<span style="font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;${map[p] ?? 'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb'}">${p}</span>`
 }
 
-function taskRow(task: TaskRow, appUrl: string) {
-  return `
-    <tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6">
-        <a href="${appUrl}/tasks/${task.id}" style="color:#1d4ed8;text-decoration:none;font-size:13px;font-weight:500">${task.title}</a>
-        ${task.category ? `<span style="margin-left:6px;font-size:11px;color:#9ca3af">${task.category}</span>` : ''}
-      </td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${priorityBadge(task.priority)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;color:#6b7280;white-space:nowrap">${task.score_weight} pts</td>
-    </tr>
-  `
+function sectionHeader(title: string, accent: string) {
+  return `<div style="background:${accent};padding:10px 16px"><strong style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.06em">${title}</strong></div>`
 }
 
-function memberSection(member: MemberGroup, appUrl: string) {
-  const hasCompleted = member.completed.length > 0
-  const hasIncomplete = member.incomplete.length > 0
-  if (!hasCompleted && !hasIncomplete) return ''
+const TH = 'padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb'
+const TD = 'padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top'
 
+function ownerCell(owner: AdminTaskWithOwner['owner']) {
+  if (!owner) return `<td style="${TD}"><span style="font-size:12px;color:#9ca3af">—</span></td>`
+  return `<td style="${TD}">
+    <span style="font-size:13px;color:#111827;font-weight:500">${owner.full_name}</span>
+    ${owner.designation ? `<br><span style="font-size:11px;color:#6b7280">${owner.designation}</span>` : ''}
+    ${owner.department ? `<span style="font-size:11px;color:#9ca3af"> · ${owner.department}</span>` : ''}
+  </td>`
+}
+
+function taskOwnerRow(t: AdminTaskWithOwner, appUrl: string) {
+  return `<tr>
+    <td style="${TD}">
+      <a href="${appUrl}/tasks/${t.id}" style="color:#1d4ed8;text-decoration:none;font-size:13px;font-weight:500">${t.title}</a>
+      ${t.category ? `<span style="margin-left:6px;font-size:11px;color:#9ca3af">${t.category}</span>` : ''}
+    </td>
+    <td style="${TD};white-space:nowrap">${priorityBadge(t.priority)}</td>
+    ${ownerCell(t.owner)}
+    <td style="${TD};font-size:12px;color:#6b7280;white-space:nowrap">${t.score_weight} pts</td>
+  </tr>`
+}
+
+function taskSection(title: string, accent: string, tasks: AdminTaskWithOwner[], appUrl: string, emptyMsg: string) {
   return `
-    <div style="margin-bottom:16px;padding:16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <strong style="font-size:14px;color:#111827">${member.full_name}</strong>
-        ${member.designation ? `<span style="font-size:12px;color:#6b7280">· ${member.designation}</span>` : ''}
-      </div>
-      ${hasCompleted ? `
-        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;margin:0 0 6px">✅ Completed (${member.completed.length})</p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:${hasIncomplete ? '12px' : '0'}">
-          <thead>
-            <tr style="background:#f9fafb">
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb">Task</th>
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb">Priority</th>
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb">Score</th>
-            </tr>
-          </thead>
-          <tbody>${member.completed.map(t => taskRow(t, appUrl)).join('')}</tbody>
-        </table>
-      ` : ''}
-      ${hasIncomplete ? `
-        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#dc2626;margin:0 0 6px">⚠️ Not Completed (${member.incomplete.length})</p>
+    <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      ${sectionHeader(title, accent)}
+      ${tasks.length > 0 ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-          <thead>
-            <tr style="background:#fef2f2">
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #fecaca">Task</th>
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #fecaca">Priority</th>
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:1px solid #fecaca">Score</th>
-            </tr>
-          </thead>
-          <tbody>${member.incomplete.map(t => taskRow(t, appUrl)).join('')}</tbody>
+          <thead><tr style="background:#f9fafb">
+            <th style="${TH}">Task</th>
+            <th style="${TH}">Priority</th>
+            <th style="${TH}">Owner</th>
+            <th style="${TH}">Score</th>
+          </tr></thead>
+          <tbody>${tasks.map(t => taskOwnerRow(t, appUrl)).join('')}</tbody>
         </table>
-      ` : ''}
+      ` : `<p style="padding:16px;font-size:13px;color:#6b7280;margin:0">${emptyMsg}</p>`}
     </div>
   `
 }
 
-export function dailyTaskSummaryEmailHtml(
-  dateLabel: string,
-  memberGroups: Record<string, MemberGroup[]>,
-  totalCompleted: number,
-  totalIncomplete: number,
-  appUrl: string,
-) {
-  const departments = Object.keys(memberGroups).sort()
-  const hasAnyData = totalCompleted + totalIncomplete > 0
+export function dailyTaskSummaryEmailHtml(opts: DailyTaskSummaryOptions): string {
+  const { dateLabel, monthLabel, appUrl, dueTodayTasks, overdueYesterdayTasks, monthlyByDept, pendingApprovals } = opts
 
-  const body = departments.map(dept => `
-    <div style="margin-bottom:24px">
-      <div style="background:#f3f4f6;border-radius:6px;padding:8px 14px;margin-bottom:12px">
-        <strong style="font-size:13px;color:#374151;text-transform:uppercase;letter-spacing:.06em">${dept || 'No Department'}</strong>
-      </div>
-      ${memberGroups[dept].map(m => memberSection(m, appUrl)).join('')}
+  const section1 = taskSection(
+    `📋 Active Tasks Due Today (${dueTodayTasks.length})`,
+    '#2563eb', dueTodayTasks, appUrl, 'No active tasks due today — great start! 🎉',
+  )
+
+  const section2 = taskSection(
+    `⚠️ Missed Yesterday — Not Completed (${overdueYesterdayTasks.length})`,
+    '#dc2626', overdueYesterdayTasks, appUrl, 'No tasks were missed yesterday.',
+  )
+
+  const deptRows = monthlyByDept.map(d => `<tr>
+    <td style="${TD};font-size:13px;color:#374151;font-weight:500">${d.department}</td>
+    <td style="${TD};font-size:13px;font-weight:700;color:#1e293b;text-align:center">${d.total}</td>
+    <td style="${TD};font-size:13px;font-weight:600;color:#16a34a;text-align:center">${d.done}</td>
+    <td style="${TD};font-size:13px;font-weight:600;color:#dc2626;text-align:center">${d.pending}</td>
+  </tr>`).join('')
+
+  const section3 = `
+    <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      ${sectionHeader(`📊 Monthly Task Load — ${monthLabel} (by Department)`, '#475569')}
+      ${monthlyByDept.length > 0 ? `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <thead><tr style="background:#f9fafb">
+            <th style="${TH}">Department</th>
+            <th style="${TH};text-align:center">Total</th>
+            <th style="${TH};text-align:center">Completed</th>
+            <th style="${TH};text-align:center">Pending</th>
+          </tr></thead>
+          <tbody>${deptRows}</tbody>
+        </table>
+      ` : `<p style="padding:16px;font-size:13px;color:#6b7280;margin:0">No tasks scheduled this month.</p>`}
     </div>
-  `).join('')
+  `
+
+  const approvalRows = pendingApprovals.map(t => {
+    const submitted = t.submitted_at
+      ? new Date(t.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—'
+    return `<tr>
+      <td style="${TD}">
+        <a href="${appUrl}/tasks/${t.id}" style="color:#1d4ed8;text-decoration:none;font-size:13px;font-weight:500">${t.title}</a>
+      </td>
+      <td style="${TD};white-space:nowrap">${priorityBadge(t.priority)}</td>
+      ${ownerCell(t.owner)}
+      <td style="${TD};font-size:12px;color:#6b7280;white-space:nowrap">${t.score_weight} pts</td>
+      <td style="${TD};font-size:12px;color:#6b7280;white-space:nowrap">${submitted}</td>
+    </tr>`
+  }).join('')
+
+  const section4 = `
+    <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      ${sectionHeader(`🔔 Pending Admin Score Approvals (${pendingApprovals.length})`, '#d97706')}
+      ${pendingApprovals.length > 0 ? `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <thead><tr style="background:#f9fafb">
+            <th style="${TH}">Task</th>
+            <th style="${TH}">Priority</th>
+            <th style="${TH}">Owner</th>
+            <th style="${TH}">Score</th>
+            <th style="${TH}">Submitted</th>
+          </tr></thead>
+          <tbody>${approvalRows}</tbody>
+        </table>
+      ` : `<p style="padding:16px;font-size:13px;color:#16a34a;margin:0;font-weight:500">✅ No pending approvals — all caught up!</p>`}
+    </div>
+  `
+
+  const monthTotal = monthlyByDept.reduce((s, d) => s + d.total, 0)
 
   return `
-    <div style="font-family:sans-serif;max-width:680px;margin:auto;background:#f9fafb;padding:0 0 32px">
-      <!-- Header -->
+    <div style="font-family:sans-serif;max-width:720px;margin:auto;background:#f9fafb;padding:0 0 32px">
       <div style="background:#1e293b;padding:24px 32px;border-radius:12px 12px 0 0">
         <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8">Edstellar · Marketing PM</p>
         <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff">Daily Task Summary</h1>
         <p style="margin:6px 0 0;font-size:13px;color:#94a3b8">${dateLabel}</p>
       </div>
 
-      <!-- Stats bar -->
-      <div style="display:flex;gap:0;background:#fff;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
-        <div style="flex:1;padding:16px 24px;border-right:1px solid #f3f4f6;text-align:center">
-          <p style="margin:0;font-size:28px;font-weight:800;color:#16a34a">${totalCompleted}</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#6b7280;font-weight:500">Completed Today</p>
-        </div>
-        <div style="flex:1;padding:16px 24px;text-align:center">
-          <p style="margin:0;font-size:28px;font-weight:800;color:#dc2626">${totalIncomplete}</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#6b7280;font-weight:500">Due Today — Not Done</p>
-        </div>
+      <div style="background:#fff;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <tr>
+            <td style="padding:14px 20px;border-right:1px solid #f3f4f6;text-align:center">
+              <p style="margin:0;font-size:26px;font-weight:800;color:#2563eb">${dueTodayTasks.length}</p>
+              <p style="margin:4px 0 0;font-size:11px;color:#6b7280;font-weight:500">Due Today</p>
+            </td>
+            <td style="padding:14px 20px;border-right:1px solid #f3f4f6;text-align:center">
+              <p style="margin:0;font-size:26px;font-weight:800;color:#dc2626">${overdueYesterdayTasks.length}</p>
+              <p style="margin:4px 0 0;font-size:11px;color:#6b7280;font-weight:500">Missed Yesterday</p>
+            </td>
+            <td style="padding:14px 20px;border-right:1px solid #f3f4f6;text-align:center">
+              <p style="margin:0;font-size:26px;font-weight:800;color:#475569">${monthTotal}</p>
+              <p style="margin:4px 0 0;font-size:11px;color:#6b7280;font-weight:500">This Month Total</p>
+            </td>
+            <td style="padding:14px 20px;text-align:center">
+              <p style="margin:0;font-size:26px;font-weight:800;color:#d97706">${pendingApprovals.length}</p>
+              <p style="margin:4px 0 0;font-size:11px;color:#6b7280;font-weight:500">Pending Approvals</p>
+            </td>
+          </tr>
+        </table>
       </div>
 
-      <!-- Body -->
       <div style="padding:24px 32px;background:#f9fafb;border:1px solid #e5e7eb;border-top:0">
-        ${hasAnyData ? body : `
-          <div style="text-align:center;padding:40px 0">
-            <p style="color:#6b7280;font-size:14px">No tasks were due today across the team.</p>
-          </div>
-        `}
-
-        <div style="margin-top:24px;text-align:center">
+        ${section1}
+        ${section2}
+        ${section3}
+        ${section4}
+        <div style="margin-top:8px;text-align:center">
           <a href="${appUrl}/admin" style="display:inline-block;padding:11px 28px;background:#4f46e5;color:#fff;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">
             Open Admin Dashboard →
           </a>
         </div>
       </div>
 
-      <!-- Footer -->
       <div style="padding:16px 32px;text-align:center">
         <p style="margin:0;font-size:11px;color:#9ca3af">You're receiving this because Daily Task Summary is enabled in Email Settings.</p>
       </div>
