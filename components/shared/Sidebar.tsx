@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Trophy, Users, FileText, Award, LogOut, Menu, X, UserCircle, Settings, ClipboardCheck, NotebookPen, CalendarCheck, Mail } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Trophy, Users, FileText, Award, LogOut, Menu, X, UserCircle, Settings, ClipboardCheck, NotebookPen, CalendarCheck, Mail, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -18,6 +18,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+  { href: '/admin/all-tasks', label: 'All Tasks', icon: <ListChecks size={18} />, adminOnly: true },
   { href: '/tasks', label: 'My Tasks', icon: <CheckSquare size={18} />, memberOnly: true },
   { href: '/notes', label: 'Meeting Notes', icon: <NotebookPen size={18} />, memberOnly: true },
   { href: '/attendance', label: 'Attendance', icon: <CalendarCheck size={18} />, memberOnly: true },
