@@ -120,23 +120,22 @@ export async function POST(req: NextRequest) {
   const yesterdayIST = new Date(nowIST)
   yesterdayIST.setDate(yesterdayIST.getDate() - 1)
   const yesterdayDate = yesterdayIST.toISOString().slice(0, 10)
-  const todayIST_startUTC = new Date(`${todayDate}T00:00:00+05:30`).toISOString()
-  const yesterdayIST_startUTC = new Date(`${yesterdayDate}T00:00:00+05:30`).toISOString()
+  const firstOfMonth = `${todayDate.slice(0, 8)}01`
 
   const [
     { data: dueTodayTasks },
-    { data: overdueTasks },
+    { data: missedYesterdayTasks },
+    { data: monthlyTasks },
     { data: pendingApprovalsAll },
-    { data: approvedYesterdayAll },
   ] = await Promise.all([
     adminDb.from('tasks').select('id, title, priority, category, score_weight, status, due_date, user_id')
       .eq('user_id', memberId).eq('due_date', todayDate).eq('is_draft', false).is('parent_task_id', null).neq('status', 'done'),
     adminDb.from('tasks').select('id, title, priority, category, score_weight, status, due_date, user_id')
-      .eq('user_id', memberId).lt('due_date', todayDate).eq('is_draft', false).is('parent_task_id', null).neq('status', 'done'),
-    adminDb.from('tasks').select('id, title, priority, score_weight, status, user_id, assigned_by')
+      .eq('user_id', memberId).eq('due_date', yesterdayDate).eq('is_draft', false).is('parent_task_id', null).neq('status', 'done'),
+    adminDb.from('tasks').select('id, status, due_date, user_id')
+      .eq('user_id', memberId).gte('due_date', firstOfMonth).lte('due_date', todayDate).eq('is_draft', false).is('parent_task_id', null),
+    adminDb.from('tasks').select('id, title, priority, category, score_weight, status, user_id, assigned_by')
       .eq('assigned_by', memberId).eq('approval_status', 'pending_approval').eq('status', 'done').eq('is_draft', false),
-    adminDb.from('tasks').select('id, title, priority, score_weight, score_earned, approved_at, approved_by, approval_note, user_id')
-      .eq('user_id', memberId).eq('approval_status', 'approved').gte('approved_at', yesterdayIST_startUTC).lt('approved_at', todayIST_startUTC),
   ])
 
   const pendingOwnerIds = [...new Set((pendingApprovalsAll ?? []).map(t => t.user_id))]
@@ -146,37 +145,26 @@ export async function POST(req: NextRequest) {
     for (const p of ownerProfiles ?? []) pendingOwnerById[p.id] = p
   }
 
-  const approverIds = [...new Set((approvedYesterdayAll ?? []).map(t => t.approved_by).filter(Boolean) as string[])]
-  const approverById: Record<string, { full_name: string; role: string }> = {}
-  if (approverIds.length) {
-    const { data: approverProfiles } = await adminDb.from('profiles').select('id, full_name, role').in('id', approverIds)
-    for (const p of approverProfiles ?? []) approverById[p.id] = p
-  }
-
   const pendingApprovals = (pendingApprovalsAll ?? []).map(t => ({
     id: t.id, title: t.title, priority: t.priority, score_weight: t.score_weight,
     assignee: pendingOwnerById[t.user_id] ?? null,
   }))
 
-  const approvedYesterday = approvedYesterdayAll ?? []
-  const approvedByPeer = approvedYesterday
-    .filter(t => t.approved_by && approverById[t.approved_by]?.role === 'member')
-    .map(t => ({ id: t.id, title: t.title, priority: t.priority, score_earned: t.score_earned ?? 0, approved_at: t.approved_at, approval_note: t.approval_note ?? null, approver: t.approved_by ? (approverById[t.approved_by] ?? null) : null }))
-  const approvedByAdmin = approvedYesterday
-    .filter(t => t.approved_by && approverById[t.approved_by]?.role === 'admin')
-    .map(t => ({ id: t.id, title: t.title, priority: t.priority, score_earned: t.score_earned ?? 0, approved_at: t.approved_at, approval_note: t.approval_note ?? null, approver: t.approved_by ? (approverById[t.approved_by] ?? null) : null }))
+  const monthlyDone = (monthlyTasks ?? []).filter(t => t.status === 'done').length
+  const monthlyTotal = (monthlyTasks ?? []).length
+  const monthlyPending = monthlyTotal - monthlyDone
+  const monthLabel = nowIST.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
   const html = memberDailyDigestEmailHtml({
     memberName: memberProfile.full_name,
     dateLabel,
     dueTodayTasks: dueTodayTasks ?? [],
-    overdueTasks: overdueTasks ?? [],
+    missedYesterdayTasks: missedYesterdayTasks ?? [],
+    monthlyProgress: { monthLabel, total: monthlyTotal, done: monthlyDone, pending: monthlyPending },
     pendingApprovals,
-    approvedByPeer,
-    approvedByAdmin,
     appUrl,
   })
 
-  await sendEmail(memberAuthUser.email, `[TEST] Your Daily Task Digest — ${subjectDate}`, html)
+  await sendEmail(memberAuthUser.email, `[TEST] Your Daily Task Summary — ${subjectDate}`, html)
   return NextResponse.json({ success: true, sentTo: memberAuthUser.email })
 }

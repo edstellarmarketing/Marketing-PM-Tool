@@ -47,10 +47,10 @@ export default async function EmailSettingsPage() {
         <EmailSettingCard
           settingKey="member_daily_digest"
           label="Member Daily Digest"
-          description="Sends each member a personalised daily email covering tasks due today, overdue tasks at risk of losing scores, dependency approvals pending their review, and task or score approvals received yesterday."
+          description="Sends each member a personalised morning email with: active tasks due today, tasks they missed yesterday, their monthly progress, and dependency approvals pending their review."
           role="member"
           initialEnabled={settings['member_daily_digest']?.enabled ?? false}
-          initialSendTime={settings['member_daily_digest']?.send_time ?? '09:00'}
+          initialSendTime={settings['member_daily_digest']?.send_time ?? '07:00'}
           members={members}
         />
       </div>
