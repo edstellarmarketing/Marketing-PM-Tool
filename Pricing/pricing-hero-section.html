@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edstellar — Corporate Training Pricing Hero Section</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #2D2F6B;
+    --navy-deep: #232558;
+    --navy-light: #3A3C7E;
+    --lime: #C5E826;
+    --lime-hover: #D4F23A;
+    --lime-text: #1A2600;
+    --white: #FFFFFF;
+    --off-white: #F4F5F7;
+    --text-body: #D0D2E0;
+    --text-muted: #9496B0;
+    --border-navy: rgba(255,255,255,0.12);
+    --border-light: #E2E3E8;
+    --surface: #FFFFFF;
+    --chrome-text: #1A1A1A;
+    --chrome-muted: #6B6D7B;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --font: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    background: var(--off-white);
+    color: var(--chrome-text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    background: var(--surface);
+    min-height: 100vh;
+  }
+
+  /* ─── Nav ─── */
+  .ed-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-light);
+  }
+  .ed-nav-left { display: flex; align-items: center; gap: 32px; }
+  .ed-logo {
+    font-size: 20px; font-weight: 800; color: var(--navy);
+    letter-spacing: -0.03em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ed-logo-icon {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2.5px solid var(--navy);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ed-logo-icon span { font-size: 11px; font-weight: 800; color: var(--navy); }
+  .ed-nav-links { display: flex; gap: 24px; list-style: none; }
+  .ed-nav-links li {
+    font-size: 14px; font-weight: 500; color: var(--chrome-muted);
+    cursor: pointer; transition: color 0.15s;
+  }
+  .ed-nav-links li:hover { color: var(--chrome-text); }
+  .ed-nav-links li.active { color: var(--chrome-text); font-weight: 700; }
+  .ed-nav-right { display: flex; align-items: center; gap: 16px; }
+  .nav-search {
+    width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border-light);
+    background: transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ed-nav-cta {
+    padding: 10px 22px; background: var(--navy); color: var(--white);
+    font-size: 14px; font-weight: 700; border: none; border-radius: 8px;
+    cursor: pointer; font-family: var(--font); letter-spacing: -0.01em;
+    transition: background 0.15s;
+  }
+  .ed-nav-cta:hover { background: var(--navy-deep); }
+
+  /* ─── Hero ─── */
+  .hero {
+    background: var(--navy);
+    padding: 52px 48px 56px;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 55% 42%;
+    gap: 3%;
+    align-items: center;
+  }
+
+  /* ─── Breadcrumb ─── */
+  .breadcrumb {
+    font-size: 13px; color: var(--text-muted); margin-bottom: 18px;
+  }
+  .breadcrumb a { color: var(--text-body); text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  .breadcrumb .sep { margin: 0 6px; opacity: 0.5; }
+
+  /* ─── Headline ─── */
+  .hero h1 {
+    font-size: 42px; font-weight: 800; line-height: 1.12;
+    color: var(--white); letter-spacing: -0.03em;
+  }
+  .hero h1 .accent { color: var(--lime); }
+
+  /* ─── Sub-headline ─── */
+  .hero-sub {
+    font-size: 15px; line-height: 1.7; color: var(--text-body);
+    margin-top: 18px; max-width: 510px;
+  }
+  .hero-sub strong { color: var(--white); font-weight: 700; }
+
+  /* ─── Trust checkmarks ─── */
+  .check-list { display: flex; flex-direction: column; gap: 12px; margin: 28px 0 32px; }
+  .check-item {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 14px; font-weight: 500; color: var(--text-body);
+  }
+  .check-icon {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--lime);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  /* ─── CTAs ─── */
+  .cta-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .btn-lime {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 14px 30px; background: var(--lime); color: var(--lime-text);
+    font-size: 15px; font-weight: 700; border: none; border-radius: 8px;
+    cursor: pointer; font-family: var(--font); letter-spacing: -0.01em;
+    transition: background 0.15s, transform 0.1s;
+    text-decoration: none;
+  }
+  .btn-lime:hover { background: var(--lime-hover); transform: translateY(-1px); }
+  .btn-outline {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 14px 30px; background: transparent; color: var(--white);
+    font-size: 15px; font-weight: 600; border: 1.5px solid rgba(255,255,255,0.35);
+    border-radius: 8px; cursor: pointer; font-family: var(--font); letter-spacing: -0.01em;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn-outline:hover { border-color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.06); }
+
+  /* ─── Right column: pricing card visual ─── */
+  .hero-right {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Hero image */
+  .hero-image {
+    width: 100%; aspect-ratio: 4/3;
+    border-radius: var(--radius-lg); overflow: hidden;
+    position: relative;
+  }
+  .hero-image img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: center;
+    display: block;
+    border-radius: var(--radius-lg);
+    transition: transform 0.4s ease;
+  }
+  .hero-image:hover img { transform: scale(1.03); }
+
+  /* Floating mini pricing stat strip */
+  .pricing-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .pricing-stat {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .pricing-stat .stat-val {
+    font-size: 22px; font-weight: 800; color: var(--lime);
+    letter-spacing: -0.03em; line-height: 1;
+  }
+  .pricing-stat .stat-val sup {
+    font-size: 13px; font-weight: 700; vertical-align: super; margin-right: 1px;
+  }
+  .pricing-stat .stat-lbl {
+    font-size: 11px; font-weight: 500; color: var(--text-muted);
+    margin-top: 5px; line-height: 1.4;
+  }
+
+  /* ─── Logo strip ─── */
+  .logo-strip {
+    padding: 18px 48px;
+    display: flex; align-items: center; gap: 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--border-light);
+  }
+  .logo-strip .label {
+    font-size: 12px; color: var(--chrome-muted);
+    white-space: nowrap; font-weight: 600;
+  }
+  .logo-strip .logos { display: flex; gap: 28px; flex: 1; flex-wrap: wrap; align-items: center; }
+  .logo-pill {
+    width: 80px; height: 22px; border-radius: 4px;
+    background: #E8E9ED; border: 1px solid var(--border-light);
+  }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 960px) {
+    .hero { padding: 36px 24px 40px; }
+    .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+    .hero h1 { font-size: 32px; }
+    .ed-nav { padding: 12px 24px; }
+    .ed-nav-links { display: none; }
+    .logo-strip { padding: 16px 24px; gap: 16px; }
+    .hero-image { aspect-ratio: 16/9; }
+    .pricing-strip { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .hero h1 { font-size: 26px; }
+    .cta-row { flex-direction: column; align-items: flex-start; }
+    .btn-lime, .btn-outline { width: 100%; justify-content: center; }
+    .pricing-strip { grid-template-columns: 1fr 1fr; }
+    .pricing-strip .pricing-stat:last-child { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- Navigation -->
+  <nav class="ed-nav">
+    <div class="ed-nav-left">
+      <div class="ed-logo">
+        <div class="ed-logo-icon"><span>e</span></div>
+        edstellar
+      </div>
+      <ul class="ed-nav-links">
+        <li>Training Programs</li>
+        <li>Platform</li>
+        <li>Managed Training</li>
+        <li>Consulting</li>
+        <li>Company</li>
+        <li>Resources</li>
+      </ul>
+    </div>
+    <div class="ed-nav-right">
+      <button class="nav-search" aria-label="Search">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="7" cy="7" r="5" stroke="var(--chrome-muted)" stroke-width="1.5"/>
+          <path d="M11 11l3.5 3.5" stroke="var(--chrome-muted)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="ed-nav-cta">Get a Quote</button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       HERO SECTION — Corporate Training Pricing
+       Base: hero-classic-split (library)
+       Adapted: pricing-specific checkmarks,
+       CTA labels, right-side stat strip
+  ════════════════════════════════════════════ -->
+  <section class="hero">
+    <div class="hero-grid">
+
+      <!-- ── Left Column: Text ── -->
+      <div>
+
+        <!-- Breadcrumb -->
+        <div class="breadcrumb">
+          <a href="#">Home</a>
+          <span class="sep">&rsaquo;</span>
+          <span style="color:var(--lime)">Corporate Training Pricing</span>
+        </div>
+
+        <!-- H1 Headline -->
+        <h1>
+          Corporate Training<br>
+          <span class="accent">Prices and Packages</span>
+        </h1>
+
+        <!-- Sub-headline -->
+        <p class="hero-sub">
+          <strong>Supercharge your upskilling initiatives with customized corporate training packages!</strong>
+          Flexible plans for teams of every size — from focused skill sprints to enterprise-wide learning programs.
+        </p>
+
+        <!-- Trust Checkpoints -->
+        <div class="check-list">
+          <div class="check-item">
+            <div class="check-icon">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M2.5 6.5l3 3 5-5" stroke="var(--lime-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            Flexible packages for teams of all sizes
+          </div>
+          <div class="check-item">
+            <div class="check-icon">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M2.5 6.5l3 3 5-5" stroke="var(--lime-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            Transparent pricing — no hidden costs
+          </div>
+          <div class="check-item">
+            <div class="check-icon">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M2.5 6.5l3 3 5-5" stroke="var(--lime-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            Custom quotes available for enterprise teams
+          </div>
+        </div>
+
+        <!-- CTAs -->
+        <div class="cta-row">
+          <a href="#pricing-options" class="btn-lime">
+            View Pricing Options
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 7h8M7.5 3.5L11 7l-3.5 3.5" stroke="var(--lime-text)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+          <a href="#contact" class="btn-outline">
+            Talk to an Expert
+          </a>
+        </div>
+
+      </div>
+
+      <!-- ── Right Column: Image + Stats ── -->
+      <div class="hero-right">
+
+        <!-- Hero Image: Business professionals reviewing corporate training packages at a table -->
+        <!-- Source: Unsplash / Amy Hirschi — ID: 1551836022-d5d88e9218df -->
+        <div class="hero-image">
+          <img
+            src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&h=600&fit=crop&auto=format&q=80"
+            alt="Business professionals reviewing corporate training package options at a conference table"
+            loading="eager"
+            width="800"
+            height="600"
+          >
+        </div>
+
+        <!-- Pricing Highlight Stats Strip -->
+        <div class="pricing-strip">
+          <div class="pricing-stat">
+            <div class="stat-val">500<sup>+</sup></div>
+            <div class="stat-lbl">Courses &amp; Programs</div>
+          </div>
+          <div class="pricing-stat">
+            <div class="stat-val">60<sup>+</sup></div>
+            <div class="stat-lbl">Global Enterprise Clients</div>
+          </div>
+          <div class="pricing-stat">
+            <div class="stat-val">ISO</div>
+            <div class="stat-lbl">9001:2015 &amp; 27001:2022 Certified</div>
+          </div>
+        </div>
+
+      </div>
+      <!-- ── End Right Column ── -->
+
+    </div>
+  </section>
+  <!-- ═══════════════════ END HERO ═══════════════════ -->
+
+  <!-- Logo Strip -->
+  <div class="logo-strip">
+    <span class="label">Trusted by 60+ enterprises</span>
+    <div class="logos">
+      <!-- Replace with actual client logo assets -->
+      <div class="logo-pill"></div>
+      <div class="logo-pill"></div>
+      <div class="logo-pill"></div>
+      <div class="logo-pill"></div>
+      <div class="logo-pill"></div>
+      <div class="logo-pill"></div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
