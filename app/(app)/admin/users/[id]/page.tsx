@@ -6,6 +6,8 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import ScoreOverrideRow from '@/components/admin/ScoreOverrideRow'
 import UserAccountActions from '@/components/admin/UserAccountActions'
 import GiveAwardButton from '@/components/admin/GiveAwardButton'
+import RecalculateScoresButton from '@/components/admin/RecalculateScoresButton'
+import UserAwardsList from '@/components/admin/UserAwardsList'
 import { removeUserAccount, updateUserAccountStatus } from './actions'
 import { formatDate, cn } from '@/lib/utils'
 import type { Profile, Task, MonthlyPlan, MonthlyScore, UserAward } from '@/types'
@@ -121,6 +123,7 @@ export default async function AdminUserPage({ params, searchParams }: Props) {
             {p.joining_date && <span>Joined {formatDate(p.joining_date)}</span>}
           </div>
         </div>
+        <RecalculateScoresButton userId={id} />
         <GiveAwardButton
           userId={id}
           userName={p.full_name}
@@ -201,28 +204,18 @@ export default async function AdminUserPage({ params, searchParams }: Props) {
             </div>
             <GiveAwardButton userId={id} userName={p.full_name} />
           </div>
-          {userAwards.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10">No awards yet</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {userAwards.map(award => {
-                const at = award.award_types
-                return (
-                  <div key={award.id} className="flex items-start gap-3 px-5 py-4">
-                    <span className="text-2xl flex-shrink-0">{at?.icon ?? '🏅'}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-sm text-gray-900">{at?.name ?? 'Award'}</p>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">+{award.bonus_points} pts</span>
-                        <span className="text-xs text-gray-400">{MONTHS[award.month - 1]} {award.year}</span>
-                      </div>
-                      {award.note && <p className="text-xs text-gray-600 mt-1 italic">"{award.note}"</p>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+          <UserAwardsList
+            userId={id}
+            awards={userAwards.map(a => ({
+              id: a.id,
+              bonus_points: a.bonus_points,
+              month: a.month,
+              year: a.year,
+              note: a.note ?? null,
+              task_id: (a as unknown as { task_id: string | null }).task_id ?? null,
+              award_types: a.award_types ? { name: a.award_types.name, icon: a.award_types.icon } : null,
+            }))}
+          />
         </div>
       )}
     </div>
