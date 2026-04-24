@@ -145,12 +145,12 @@ export function dailyTaskSummaryEmailHtml(opts: DailyTaskSummaryOptions): string
   const { dateLabel, monthLabel, appUrl, dueTodayTasks, overdueYesterdayTasks, monthlyByDept, pendingApprovals } = opts
 
   const section1 = taskSection(
-    `📋 Active Tasks Due Today (${dueTodayTasks.length})`,
-    '#2563eb', dueTodayTasks, appUrl, 'No active tasks due today — great start! 🎉',
+    `Active Tasks Due Today (${dueTodayTasks.length})`,
+    '#2563eb', dueTodayTasks, appUrl, 'No active tasks due today — great start!',
   )
 
   const section2 = taskSection(
-    `⚠️ Missed Yesterday — Not Completed (${overdueYesterdayTasks.length})`,
+    `Missed Yesterday — Not Completed (${overdueYesterdayTasks.length})`,
     '#dc2626', overdueYesterdayTasks, appUrl, 'No tasks were missed yesterday.',
   )
 
@@ -163,7 +163,7 @@ export function dailyTaskSummaryEmailHtml(opts: DailyTaskSummaryOptions): string
 
   const section3 = `
     <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      ${sectionHeader(`📊 Monthly Task Load — ${monthLabel} (by Department)`, '#475569')}
+      ${sectionHeader(`Monthly Task Load — ${monthLabel} (by Department)`, '#475569')}
       ${monthlyByDept.length > 0 ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <thead><tr style="background:#f9fafb">
@@ -195,7 +195,7 @@ export function dailyTaskSummaryEmailHtml(opts: DailyTaskSummaryOptions): string
 
   const section4 = `
     <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      ${sectionHeader(`🔔 Pending Admin Score Approvals (${pendingApprovals.length})`, '#d97706')}
+      ${sectionHeader(`Pending Admin Score Approvals (${pendingApprovals.length})`, '#d97706')}
       ${pendingApprovals.length > 0 ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <thead><tr style="background:#f9fafb">
@@ -207,7 +207,7 @@ export function dailyTaskSummaryEmailHtml(opts: DailyTaskSummaryOptions): string
           </tr></thead>
           <tbody>${approvalRows}</tbody>
         </table>
-      ` : `<p style="padding:16px;font-size:13px;color:#16a34a;margin:0;font-weight:500">✅ No pending approvals — all caught up!</p>`}
+      ` : `<p style="padding:16px;font-size:13px;color:#16a34a;margin:0;font-weight:500">No pending approvals — all caught up!</p>`}
     </div>
   `
 
@@ -334,13 +334,13 @@ export function memberDailyDigestEmailHtml(opts: MemberDailyDigestOptions): stri
 
   // Section 1 — Due today
   const section1 = memberTaskSection(
-    `📋 My Active Tasks Due Today (${dueTodayTasks.length})`,
-    '#2563eb', dueTodayTasks, appUrl, 'You have no tasks due today — great start! 🎉',
+    `My Active Tasks Due Today (${dueTodayTasks.length})`,
+    '#2563eb', dueTodayTasks, appUrl, 'You have no tasks due today — great start!',
   )
 
   // Section 2 — Missed yesterday
   const section2 = memberTaskSection(
-    `⚠️ Missed Yesterday — Still Not Done (${missedYesterdayTasks.length})`,
+    `Missed Yesterday — Still Not Done (${missedYesterdayTasks.length})`,
     '#dc2626', missedYesterdayTasks, appUrl, 'Nothing missed yesterday — keep it up!',
     true,
   )
@@ -349,7 +349,7 @@ export function memberDailyDigestEmailHtml(opts: MemberDailyDigestOptions): stri
   const mp = monthlyProgress
   const section3 = `
     <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      ${sectionHeader(`📊 My Monthly Progress — ${mp.monthLabel}`, '#475569')}
+      ${sectionHeader(`My Monthly Progress — ${mp.monthLabel}`, '#475569')}
       ${mp.total > 0 ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <thead><tr style="background:#f9fafb">
@@ -379,7 +379,7 @@ export function memberDailyDigestEmailHtml(opts: MemberDailyDigestOptions): stri
 
   const section4 = `
     <div style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      ${sectionHeader(`🔔 Pending Approvals I Need to Give (${pendingApprovals.length})`, '#d97706')}
+      ${sectionHeader(`Pending Approvals I Need to Give (${pendingApprovals.length})`, '#d97706')}
       ${pendingApprovals.length > 0 ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <thead><tr style="background:#f9fafb">
@@ -389,7 +389,7 @@ export function memberDailyDigestEmailHtml(opts: MemberDailyDigestOptions): stri
           </tr></thead>
           <tbody>${approvalRows}</tbody>
         </table>
-      ` : `<p style="padding:16px;font-size:13px;color:#16a34a;margin:0;font-weight:500">✅ No approvals waiting for you.</p>`}
+      ` : `<p style="padding:16px;font-size:13px;color:#16a34a;margin:0;font-weight:500">No approvals waiting for you.</p>`}
     </div>
   `
 
