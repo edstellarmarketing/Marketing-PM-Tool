@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Search, Trash2, X, AlertTriangle, ChevronDown, Filter, Users, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -69,6 +70,7 @@ function isOverdue(due: string | null, status: string) {
 }
 
 export default function AllTasksTable() {
+  const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -180,6 +182,7 @@ export default function AllTasksTable() {
         setTasks(prev => prev.filter(t => !ids.includes(t.id)))
         setSelected(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n })
         setConfirmDelete(null)
+        router.refresh()
       }
     } finally {
       setDeleting(false)
@@ -454,8 +457,8 @@ export default function AllTasksTable() {
                 </h3>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   {confirmDelete.mode === 'bulk'
-                    ? `This will permanently delete ${confirmDelete.count} tasks from the database. This action cannot be undone.`
-                    : 'This will permanently delete the task and all its data from the database. This action cannot be undone.'}
+                    ? `This will permanently delete ${confirmDelete.count} tasks and any linked awards from the database. Affected scores will be updated. This action cannot be undone.`
+                    : 'This will permanently delete the task and any linked awards from the database. Affected scores will be updated. This action cannot be undone.'}
                 </p>
                 {deleteError && (
                   <p className="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
