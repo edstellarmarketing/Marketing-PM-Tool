@@ -215,13 +215,55 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
   const isAdmin = profile?.role === 'admin'
 
-  // Permission check: strictly admin-only for deletion
   if (!isAdmin) {
     return NextResponse.json({ error: 'Unauthorized. Only admins can delete tasks.' }, { status: 401 })
   }
 
-  // Use admin client to bypass RLS
   const adminClient = createAdminClient()
+
+  // 1. Find all awards linked to this task before it is deleted
+  const { data: linkedAwards } = await adminClient
+    .from('user_awards')
+    .select('user_id, bonus_points, month, year')
+    .eq('task_id', id)
+
+  // 2. Aggregate bonus_points to subtract per (user, month, year)
+  if (linkedAwards && linkedAwards.length > 0) {
+    const decrements = new Map<string, { user_id: string; month: number; year: number; total: number }>()
+    for (const a of linkedAwards as { user_id: string; bonus_points: number; month: number; year: number }[]) {
+      const key = `${a.user_id}:${a.month}:${a.year}`
+      const entry = decrements.get(key)
+      if (entry) {
+        entry.total += a.bonus_points
+      } else {
+        decrements.set(key, { user_id: a.user_id, month: a.month, year: a.year, total: a.bonus_points })
+      }
+    }
+
+    // 3. Decrement bonus_points in monthly_scores for each affected user/month/year
+    for (const { user_id, month, year, total } of decrements.values()) {
+      const { data: ms } = await adminClient
+        .from('monthly_scores')
+        .select('id, bonus_points')
+        .eq('user_id', user_id)
+        .eq('month', month)
+        .eq('year', year)
+        .single()
+
+      if (ms) {
+        await adminClient
+          .from('monthly_scores')
+          .update({ bonus_points: Math.max(0, ((ms as { bonus_points: number }).bonus_points ?? 0) - total) })
+          .eq('id', (ms as { id: string }).id)
+      }
+    }
+
+    // 4. Delete the awards (must happen before task deletion to query by task_id)
+    await adminClient.from('user_awards').delete().eq('task_id', id)
+  }
+
+  // 5. Delete the task — DB trigger automatically recalculates monthly_scores
+  //    for the task's own score_earned / score_weight contribution
   const { error: dbError } = await adminClient.from('tasks').delete().eq('id', id)
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
   return new NextResponse(null, { status: 204 })
