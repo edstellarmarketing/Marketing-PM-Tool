@@ -162,7 +162,7 @@ export default function DependencyAccordion({ child, canReview }: Props) {
       {isOpen && (
         <div className="border-t border-gray-100 bg-gray-50/40 px-4 pl-12 py-4 space-y-4">
           {child.description && (
-            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{child.description}</p>
+            <div className="text-sm text-gray-600 leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: child.description }} />
           )}
 
           {(totalSubs > 0 || child.start_date || child.completion_date) && (

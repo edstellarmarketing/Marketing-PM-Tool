@@ -229,7 +229,7 @@ export default async function TaskDetailPage({ params }: Props) {
         </div>
 
         {task.description && (
-          <p className="text-gray-600 text-sm leading-relaxed">{task.description}</p>
+          <div className="text-gray-600 text-sm leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: task.description }} />
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-gray-100">

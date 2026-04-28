@@ -118,7 +118,7 @@ export default function TaskCard({ task, isAdmin, goalName, onQuickComplete, onS
           </div>
 
           {task.description && (
-            <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{task.description}</p>
+            <div className="text-sm text-gray-500 mt-0.5 line-clamp-2 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: task.description }} />
           )}
 
           <div className="flex flex-wrap items-center gap-2 mt-3">
