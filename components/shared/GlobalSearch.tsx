@@ -33,7 +33,8 @@ export default function GlobalSearch() {
   // Keyboard shortcut: / to focus
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      const activeEl = document.activeElement as HTMLElement | null
+      if (e.key === '/' && activeEl?.tagName !== 'INPUT' && activeEl?.tagName !== 'TEXTAREA' && !activeEl?.isContentEditable) {
         e.preventDefault()
         inputRef.current?.focus()
         setOpen(true)

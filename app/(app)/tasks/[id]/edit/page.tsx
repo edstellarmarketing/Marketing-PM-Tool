@@ -8,6 +8,7 @@ import type { Task, SubTask, TaskType, Complexity, PointConfig, TaskDateChangeRe
 import ScoringClassification from '@/components/tasks/ScoringClassification'
 import DateChangeRequestForm from '@/components/tasks/DateChangeRequestForm'
 import { computeScorePreview } from '@/lib/scoring'
+import RichTextEditor from '@/components/notes/RichTextEditor'
 
 const priorities = ['low', 'medium', 'high', 'critical']
 
@@ -131,9 +132,11 @@ function DependencyCard({ child, isAdmin, configs, profiles }: DepCardProps) {
       {/* Description */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-        <textarea rows={2} value={form.description} onChange={e => setF('description', e.target.value)}
+        <RichTextEditor
+          value={form.description}
+          onChange={html => setF('description', html)}
           placeholder="Describe what needs to be done…"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none" />
+        />
       </div>
 
       {/* Scoring — locked for non-admins; admin can edit if task not done */}
@@ -397,9 +400,11 @@ export default function EditTaskPage({ params }: Props) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea rows={3} value={form.description} onChange={e => setField('description', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="What needs to be done?" />
+            <RichTextEditor
+              value={form.description}
+              onChange={html => setField('description', html)}
+              placeholder="What needs to be done?"
+            />
           </div>
 
           <ScoringClassification

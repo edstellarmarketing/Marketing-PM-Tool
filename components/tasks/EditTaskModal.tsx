@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X, Zap } from 'lucide-react'
 import type { Task, TaskType, Complexity } from '@/types'
+import RichTextEditor from '@/components/notes/RichTextEditor'
 
 const taskTypeOptions: { value: TaskType; label: string; icon: string }[] = [
   { value: 'monthly_task',       label: 'Monthly Task',       icon: '🔁' },
@@ -88,11 +89,9 @@ export default function EditTaskModal({ task, onClose, onSaved }: Props) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              rows={3}
+            <RichTextEditor
               value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              onChange={html => setDescription(html)}
             />
           </div>
 

@@ -8,8 +8,9 @@ export default function KeyboardShortcuts() {
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      const tag = document.activeElement?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const el = document.activeElement as HTMLElement | null
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
 
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault()
