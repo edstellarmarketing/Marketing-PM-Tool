@@ -7,6 +7,7 @@ import Link from 'next/link'
 import TaskSuggestionPanel from '@/components/ai/TaskSuggestionPanel'
 import ScoringClassification from '@/components/tasks/ScoringClassification'
 import { computeScorePreview } from '@/lib/scoring'
+import RichTextEditor from '@/components/notes/RichTextEditor'
 import type { SubTask, TaskType, Complexity, PointConfig, Priority } from '@/types'
 
 interface UserOption {
@@ -381,11 +382,9 @@ export default function NewTaskPage() {
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              rows={3}
+            <RichTextEditor
               value={form.description}
-              onChange={e => setField('description', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              onChange={html => setField('description', html)}
               placeholder="What needs to be done?"
             />
           </div>
@@ -623,12 +622,10 @@ export default function NewTaskPage() {
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                       />
 
-                      <textarea
-                        rows={3}
+                      <RichTextEditor
                         value={d.description}
-                        onChange={e => updateDependency(d.id, { description: e.target.value })}
+                        onChange={html => updateDependency(d.id, { description: html })}
                         placeholder="Detailed description — context, requirements, acceptance criteria…"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"
                       />
 
                       <div className="grid grid-cols-2 gap-3">

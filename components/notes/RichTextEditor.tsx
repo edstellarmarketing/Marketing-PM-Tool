@@ -1,6 +1,7 @@
 'use client'
 
 import { useEditor, EditorContent } from '@tiptap/react'
+import { useEffect } from 'react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
@@ -57,6 +58,13 @@ export default function RichTextEditor({ value, onChange, placeholder }: Props) 
       },
     },
   })
+
+  useEffect(() => {
+    if (!editor) return
+    if (value !== editor.getHTML()) {
+      editor.commands.setContent(value || '', false)
+    }
+  }, [value, editor])
 
   if (!editor) return null
 
