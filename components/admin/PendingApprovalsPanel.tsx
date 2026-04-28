@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Task } from '@/types'
+import { stripHtml } from '@/lib/utils'
 
 type PendingTask = Task & { profiles: { full_name: string; avatar_url: string | null } }
 
@@ -160,7 +161,7 @@ export default function PendingApprovalsPanel() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 text-sm">{task.title}</p>
                         {task.description && (
-                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{task.description}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{stripHtml(task.description)}</p>
                         )}
                         <div className="flex gap-2 mt-1.5 flex-wrap items-center">
                           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">{task.priority}</span>

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { cn, formatDate, isOverdue } from '@/lib/utils'
+import { cn, formatDate, isOverdue, stripHtml } from '@/lib/utils'
 import { Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, ExternalLink, Search, X, Zap, Info, Link as LinkIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Task } from '@/types'
 
@@ -356,7 +356,7 @@ export default function TaskListClient({ initialTasks, isAdmin, currentUserId, p
               </div>
 
               {task.description && (
-                <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{task.description}</p>
+                <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{stripHtml(task.description)}</p>
               )}
             </div>
           </div>

@@ -15,6 +15,10 @@ export function isOverdue(dueDate: string | null | undefined, status: string): b
   return new Date(dueDate) < new Date(new Date().toDateString())
 }
 
+export function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 export function getCurrentFinancialYear(): string {
   const now = new Date()
   const year = now.getFullYear()
