@@ -58,6 +58,8 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deletingBulk, setDeletingBulk] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<'open' | 'completed' | 'all'>('open')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -98,9 +100,11 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
     return tasks.filter(t => {
       if (activeOwnerId !== 'all' && t.owner_id !== activeOwnerId) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
+      if (statusFilter === 'open' && t.status === 'completed') return false
+      if (statusFilter === 'completed' && t.status !== 'completed') return false
       return true
     })
-  }, [tasks, activeOwnerId, search])
+  }, [tasks, activeOwnerId, search, statusFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -339,10 +343,43 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                 className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-              <Filter size={14} />
-              Filters
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setFiltersOpen(o => !o)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg ${
+                  statusFilter !== 'all'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                    : 'border-gray-200 dark:border-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <Filter size={14} />
+                {statusFilter === 'open' ? 'Open' : statusFilter === 'completed' ? 'Completed' : 'All tasks'}
+              </button>
+              {filtersOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setFiltersOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg p-1">
+                    {([
+                      { value: 'open', label: 'Open (not completed)' },
+                      { value: 'completed', label: 'Completed only' },
+                      { value: 'all', label: 'All tasks' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => { setStatusFilter(opt.value); setFiltersOpen(false); setPage(1) }}
+                        className={`w-full text-left px-3 py-1.5 text-sm rounded ${
+                          statusFilter === opt.value
+                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => setDrawerOpen(true)}
               disabled={!canAddTask}
