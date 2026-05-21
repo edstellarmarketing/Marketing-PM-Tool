@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Save, Trash2, Settings as SettingsIcon, Mail } from 'lucide-react'
+import { X, Save, Trash2, Settings as SettingsIcon, Mail, Send } from 'lucide-react'
 import type { Project, ProjectStatus } from '@/types'
 
 interface Props {
@@ -22,7 +22,23 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
+  const [testStatus, setTestStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  async function handleSendTestEmail() {
+    setError(null)
+    setTestStatus(null)
+    setSendingTest(true)
+    const res = await fetch('/api/admin/send-test-project-digest', { method: 'POST' })
+    setSendingTest(false)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(typeof data.error === 'string' ? data.error : 'Failed to send test email')
+      return
+    }
+    setTestStatus(data.to ? `Sent to ${data.to}` : 'Sent')
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -138,7 +154,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
             </select>
           </div>
 
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -156,6 +172,20 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
                 </span>
               </span>
             </label>
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={handleSendTestEmail}
+                disabled={sendingTest || saving || deleting}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                <Send size={13} />
+                {sendingTest ? 'Sending…' : 'Send test email to me'}
+              </button>
+              {testStatus && (
+                <span className="text-xs text-emerald-700 dark:text-emerald-400">{testStatus}</span>
+              )}
+            </div>
           </div>
 
           {error && (
