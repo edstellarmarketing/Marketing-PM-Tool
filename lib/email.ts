@@ -487,16 +487,6 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function priorityBadge(p: string) {
-  const colors: Record<string, string> = {
-    critical: '#dc2626',
-    high: '#ea580c',
-    medium: '#2563eb',
-    low: '#6b7280',
-  }
-  return `<span style="display:inline-block;font-size:11px;font-weight:600;color:${colors[p] ?? '#6b7280'};text-transform:capitalize">${p}</span>`
-}
-
 function statusPill(status: string, overdue: boolean) {
   if (overdue) return `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:9999px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">Overdue</span>`
   const map: Record<string, { bg: string; fg: string; border: string; label: string }> = {
