@@ -15,7 +15,7 @@ const updateSchema = z.object({
   dependency_task: z.string().max(200).nullable().optional(),
   dependency_details: z.string().max(2000).nullable().optional(),
   dependency_status: z.string().max(60).nullable().optional(),
-  dependency_owner: z.string().max(120).nullable().optional(),
+  dependency_owner_id: z.string().uuid().nullable().optional(),
   final_comments: z.string().max(4000).nullable().optional(),
 })
 

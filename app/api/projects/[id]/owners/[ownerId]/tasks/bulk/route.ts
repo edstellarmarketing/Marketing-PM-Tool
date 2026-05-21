@@ -14,7 +14,7 @@ const rowSchema = z.object({
   dependency_task: z.string().max(200).nullable().optional(),
   dependency_details: z.string().max(2000).nullable().optional(),
   dependency_status: z.string().max(60).nullable().optional(),
-  dependency_owner: z.string().max(120).nullable().optional(),
+  dependency_owner_id: z.string().uuid().nullable().optional(),
   final_comments: z.string().max(4000).nullable().optional(),
 })
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     dependency_task: r.dependency_task ?? null,
     dependency_details: r.dependency_details ?? null,
     dependency_status: r.dependency_status ?? null,
-    dependency_owner: r.dependency_owner ?? null,
+    dependency_owner_id: r.dependency_owner_id ?? null,
     final_comments: r.final_comments ?? null,
     created_by: user.id,
   }))
