@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
@@ -52,6 +52,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
   const [page, setPage] = useState(1)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<ProjectTask | null>(null)
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -300,23 +301,24 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
 
         {/* Task table */}
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm min-w-[1500px] w-full">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
-                <th className="px-4 py-2 font-medium">Task</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Priority</th>
+                <th className="px-4 py-2 font-medium w-64">Task</th>
+                <th className="px-4 py-2 font-medium w-28">Status</th>
+                <th className="px-4 py-2 font-medium w-24">Priority</th>
                 <th className="px-4 py-2 font-medium w-44">Progress</th>
-                <th className="px-4 py-2 font-medium">Due Date</th>
-                <th className="px-4 py-2 font-medium">Project Owner</th>
-                <th className="px-4 py-2 font-medium">Dependency</th>
-                <th className="px-4 py-2 font-medium">Final Comments</th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Due Date</th>
+                <th className="px-4 py-2 font-medium w-48 whitespace-nowrap">Project Owner</th>
+                <th className="px-4 py-2 font-medium w-64">Dependency</th>
+                <th className="px-4 py-2 font-medium w-72">Final Comments</th>
+                <th className="px-4 py-2 font-medium w-16 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -402,6 +404,15 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setEditingTask(t)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                          title="Edit task"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })
@@ -444,6 +455,17 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
           defaultOwnerId={activeOwnerId !== 'all' ? activeOwnerId : (owners[0]?.id ?? null)}
           onClose={() => setDrawerOpen(false)}
           onCreated={() => { setDrawerOpen(false); router.refresh() }}
+        />
+      )}
+
+      {editingTask && (
+        <AddProjectTaskDrawer
+          projectId={project.id}
+          owners={owners}
+          defaultOwnerId={editingTask.owner_id}
+          task={editingTask}
+          onClose={() => setEditingTask(null)}
+          onCreated={() => { setEditingTask(null); router.refresh() }}
         />
       )}
     </div>

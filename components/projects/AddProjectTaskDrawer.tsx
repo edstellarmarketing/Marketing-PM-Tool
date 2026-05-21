@@ -1,33 +1,37 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Plus } from 'lucide-react'
-import type { ProjectOwner } from '@/types'
+import { X, Plus, Save, Trash2 } from 'lucide-react'
+import type { ProjectOwner, ProjectTask } from '@/types'
 
 interface Props {
   projectId: string
   owners: ProjectOwner[]
   defaultOwnerId: string | null
+  task?: ProjectTask | null
   onClose: () => void
   onCreated: () => void
 }
 
-export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, onClose, onCreated }: Props) {
+export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, onClose, onCreated }: Props) {
+  const isEdit = !!task
+
   const [form, setForm] = useState({
-    owner_id: defaultOwnerId ?? '',
-    title: '',
-    description: '',
-    priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
-    status: 'pending' as 'pending' | 'in_progress' | 'completed',
-    progress: 0,
-    due_date: '',
-    dependency_task: '',
-    dependency_details: '',
-    dependency_status: '',
-    dependency_owner: '',
-    final_comments: '',
+    owner_id: task?.owner_id ?? defaultOwnerId ?? '',
+    title: task?.title ?? '',
+    description: task?.description ?? '',
+    priority: (task?.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'critical',
+    status: (task?.status ?? 'pending') as 'pending' | 'in_progress' | 'completed',
+    progress: task?.progress ?? 0,
+    due_date: task?.due_date ?? '',
+    dependency_task: task?.dependency_task ?? '',
+    dependency_details: task?.dependency_details ?? '',
+    dependency_status: task?.dependency_status ?? '',
+    dependency_owner: task?.dependency_owner ?? '',
+    final_comments: task?.final_comments ?? '',
   })
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedOwner = owners.find(o => o.id === form.owner_id) ?? null
@@ -36,35 +40,57 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.owner_id) {
-      setError('Pick an owner first')
+      setError('Pick a category first')
       return
     }
     setError(null)
     setLoading(true)
 
-    const res = await fetch(`/api/projects/${projectId}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        owner_id: form.owner_id,
-        title: form.title.trim(),
-        description: form.description.trim() || null,
-        priority: form.priority,
-        status: form.status,
-        progress: Number(form.progress) || 0,
-        due_date: form.due_date || null,
-        dependency_task: form.dependency_task.trim() || null,
-        dependency_details: form.dependency_details.trim() || null,
-        dependency_status: form.dependency_status.trim() || null,
-        dependency_owner: form.dependency_owner.trim() || null,
-        final_comments: form.final_comments.trim() || null,
-      }),
-    })
+    const payload = {
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      priority: form.priority,
+      status: form.status,
+      progress: Number(form.progress) || 0,
+      due_date: form.due_date || null,
+      dependency_task: form.dependency_task.trim() || null,
+      dependency_details: form.dependency_details.trim() || null,
+      dependency_status: form.dependency_status.trim() || null,
+      dependency_owner: form.dependency_owner.trim() || null,
+      final_comments: form.final_comments.trim() || null,
+    }
+
+    const res = isEdit
+      ? await fetch(`/api/project-tasks/${task!.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      : await fetch(`/api/projects/${projectId}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, owner_id: form.owner_id }),
+        })
 
     setLoading(false)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      setError(typeof data.error === 'string' ? data.error : 'Failed to create task')
+      setError(typeof data.error === 'string' ? data.error : `Failed to ${isEdit ? 'update' : 'create'} task`)
+      return
+    }
+    onCreated()
+  }
+
+  async function handleDelete() {
+    if (!isEdit) return
+    if (!confirm('Delete this task? This cannot be undone.')) return
+    setError(null)
+    setDeleting(true)
+    const res = await fetch(`/api/project-tasks/${task!.id}`, { method: 'DELETE' })
+    setDeleting(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(typeof data.error === 'string' ? data.error : 'Failed to delete task')
       return
     }
     onCreated()
@@ -74,7 +100,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Add Task</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{isEdit ? 'Edit Task' : 'Add Task'}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             <X size={18} />
           </button>
@@ -239,14 +265,14 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-lg px-3 py-2">{error}</p>
           )}
 
-          <div className="flex gap-3 pt-1">
+          <div className="flex items-center gap-3 pt-1">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || deleting}
               className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              <Plus size={15} />
-              {loading ? 'Adding…' : 'Add Task'}
+              {isEdit ? <Save size={15} /> : <Plus size={15} />}
+              {loading ? (isEdit ? 'Saving…' : 'Adding…') : (isEdit ? 'Save Changes' : 'Add Task')}
             </button>
             <button
               type="button"
@@ -255,6 +281,17 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             >
               Cancel
             </button>
+            {isEdit && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={loading || deleting}
+                className="ml-auto flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg disabled:opacity-50"
+              >
+                <Trash2 size={15} />
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            )}
           </div>
         </form>
       </div>
