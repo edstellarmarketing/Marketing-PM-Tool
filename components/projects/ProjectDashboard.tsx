@@ -340,7 +340,13 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                   return (
                     <tr key={t.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900 dark:text-white">{t.title}</p>
+                        <button
+                          onClick={() => setEditingTask(t)}
+                          className="text-left font-medium text-gray-900 dark:text-white hover:text-blue-600 hover:underline focus:outline-none focus:text-blue-600"
+                          title="Click to edit"
+                        >
+                          {t.title}
+                        </button>
                         {t.category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.category}</p>}
                       </td>
                       <td className="px-4 py-3">
