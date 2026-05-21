@@ -10,6 +10,7 @@ const updateSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   status: z.enum(['pending', 'in_progress', 'completed']).optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  start_date: z.string().nullable().optional(),
   due_date: z.string().nullable().optional(),
   dependency_task: z.string().max(200).nullable().optional(),
   dependency_details: z.string().max(2000).nullable().optional(),

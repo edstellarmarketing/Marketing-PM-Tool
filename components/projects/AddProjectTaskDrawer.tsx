@@ -23,6 +23,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
     priority: (task?.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'critical',
     status: (task?.status ?? 'pending') as 'pending' | 'in_progress' | 'completed',
     progress: task?.progress ?? 0,
+    start_date: task?.start_date ?? '',
     due_date: task?.due_date ?? '',
     dependency_task: task?.dependency_task ?? '',
     dependency_details: task?.dependency_details ?? '',
@@ -52,6 +53,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
       priority: form.priority,
       status: form.status,
       progress: Number(form.progress) || 0,
+      start_date: form.start_date || null,
       due_date: form.due_date || null,
       dependency_task: form.dependency_task.trim() || null,
       dependency_details: form.dependency_details.trim() || null,
@@ -192,14 +194,25 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-            <input
-              type="date"
-              value={form.due_date}
-              onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={form.start_date}
+                onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+              <input
+                type="date"
+                value={form.due_date}
+                onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
