@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { X, Upload, Download, Check, AlertCircle, Copy } from 'lucide-react'
+import { X, Upload, Download, Check, AlertCircle, Copy, ExternalLink } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import type { Profile, ProjectOwner } from '@/types'
 
@@ -358,6 +358,15 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
             >
               <Download size={15} />
               CSV Template
+            </a>
+            <a
+              href="https://docs.google.com/spreadsheets/d/1-7-SY76p2cgXyzHXs4UFkWopjxbsUZcxb5xOVkV8E4g/edit?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <ExternalLink size={15} />
+              Open in Google Sheets
             </a>
             <button
               type="button"
