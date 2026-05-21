@@ -268,6 +268,7 @@ export interface Project {
   end_date: string | null
   status: ProjectStatus
   color: string | null
+  notify_email_enabled: boolean
   created_by: string
   created_at: string
   updated_at: string

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Save, Trash2, Settings as SettingsIcon } from 'lucide-react'
+import { X, Save, Trash2, Settings as SettingsIcon, Mail } from 'lucide-react'
 import type { Project, ProjectStatus } from '@/types'
 
 interface Props {
@@ -18,6 +18,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
     start_date: project.start_date ?? '',
     end_date: project.end_date ?? '',
     status: (project.status ?? 'active') as ProjectStatus,
+    notify_email_enabled: project.notify_email_enabled ?? true,
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -37,6 +38,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         status: form.status,
+        notify_email_enabled: form.notify_email_enabled,
       }),
     })
 
@@ -134,6 +136,26 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
               <option value="completed">Completed</option>
               <option value="archived">Archived</option>
             </select>
+          </div>
+
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.notify_email_enabled}
+                onChange={e => setForm(p => ({ ...p, notify_email_enabled: e.target.checked }))}
+                className="mt-1 rounded border-gray-300"
+              />
+              <span className="flex-1">
+                <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                  <Mail size={14} className="text-blue-600" />
+                  Email notifications
+                </span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Send a daily 8 AM digest to each project owner with their tasks, and a consolidated portfolio summary to admins.
+                </span>
+              </span>
+            </label>
           </div>
 
           {error && (

@@ -456,3 +456,229 @@ export function appraisalPublishedEmailHtml(fullName: string, appUrl: string) {
     </div>
   `
 }
+
+// ── Project Daily Digest ─────────────────────────────────────────────────
+
+export interface ProjectDigestTask {
+  id: string
+  title: string
+  status: 'pending' | 'in_progress' | 'completed'
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  progress: number
+  start_date: string | null
+  due_date: string | null
+  dependency_task: string | null
+  dependency_status: string | null
+}
+
+export interface ProjectDigestOwnerSummary {
+  ownerName: string
+  department: string
+  total: number
+  completed: number
+  in_progress: number
+  pending: number
+  overdue: number
+  progressPct: number
+}
+
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function priorityBadge(p: string) {
+  const colors: Record<string, string> = {
+    critical: '#dc2626',
+    high: '#ea580c',
+    medium: '#2563eb',
+    low: '#6b7280',
+  }
+  return `<span style="display:inline-block;font-size:11px;font-weight:600;color:${colors[p] ?? '#6b7280'};text-transform:capitalize">${p}</span>`
+}
+
+function statusPill(status: string, overdue: boolean) {
+  if (overdue) return `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:9999px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">Overdue</span>`
+  const map: Record<string, { bg: string; fg: string; border: string; label: string }> = {
+    pending: { bg: '#fffbeb', fg: '#b45309', border: '#fde68a', label: 'Pending' },
+    in_progress: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', label: 'In Progress' },
+    completed: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', label: 'Completed' },
+  }
+  const s = map[status] ?? map.pending
+  return `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:9999px;background:${s.bg};color:${s.fg};border:1px solid ${s.border}">${s.label}</span>`
+}
+
+function taskRow(t: ProjectDigestTask, today: string) {
+  const overdue = t.status !== 'completed' && !!t.due_date && t.due_date < today
+  return `
+    <tr>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:13px">${escapeHtml(t.title)}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px">${statusPill(t.status, overdue)}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px">${priorityBadge(t.priority)}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:#374151;font-size:13px">${t.progress}%</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:${overdue ? '#b91c1c' : '#374151'};font-size:13px;white-space:nowrap">${fmtDate(t.due_date)}</td>
+    </tr>
+  `
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+}
+
+export function projectOwnerDigestEmailHtml(args: {
+  ownerName: string
+  projectName: string
+  projectUrl: string
+  department: string
+  today: string
+  summary: ProjectDigestOwnerSummary
+  dueToday: ProjectDigestTask[]
+  overdue: ProjectDigestTask[]
+  inProgress: ProjectDigestTask[]
+  blockedByDeps: ProjectDigestTask[]
+}) {
+  const { ownerName, projectName, projectUrl, department, today, summary, dueToday, overdue, inProgress, blockedByDeps } = args
+
+  const statBox = (label: string, value: number | string, color = '#111827') => `
+    <td style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;text-align:center;width:20%">
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">${label}</div>
+      <div style="font-size:22px;font-weight:700;color:${color};margin-top:4px">${value}</div>
+    </td>
+  `
+
+  const section = (title: string, items: ProjectDigestTask[], emptyText: string) => `
+    <h3 style="margin:24px 0 8px;font-size:14px;color:#111827;font-weight:600">${title} ${items.length > 0 ? `<span style="color:#6b7280;font-weight:400">(${items.length})</span>` : ''}</h3>
+    ${items.length === 0 ? `<p style="color:#9ca3af;font-size:13px;margin:4px 0">${emptyText}</p>` : `
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f9fafb">
+            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Task</th>
+            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Status</th>
+            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Priority</th>
+            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Progress</th>
+            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Due</th>
+          </tr>
+        </thead>
+        <tbody>${items.slice(0, 15).map(t => taskRow(t, today)).join('')}</tbody>
+      </table>
+    `}
+  `
+
+  return `
+    <div style="font-family:sans-serif;max-width:680px;margin:auto;padding:32px;background:#ffffff;color:#111827">
+      <div style="border-bottom:1px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px">
+        <p style="margin:0;color:#6b7280;font-size:13px">${fmtDate(today)} · ${escapeHtml(department)} daily digest</p>
+        <h1 style="margin:8px 0 0;font-size:22px;color:#111827">${escapeHtml(projectName)}</h1>
+        <p style="margin:8px 0 0;color:#374151;font-size:14px">Hi ${escapeHtml(ownerName)},</p>
+      </div>
+
+      <table style="width:100%;border-spacing:8px;margin-left:-8px">
+        <tr>
+          ${statBox('Progress', `${summary.progressPct}%`, '#2563eb')}
+          ${statBox('Total', summary.total)}
+          ${statBox('In Progress', summary.in_progress, '#1d4ed8')}
+          ${statBox('Pending', summary.pending, '#b45309')}
+          ${statBox('Overdue', summary.overdue, summary.overdue > 0 ? '#b91c1c' : '#111827')}
+        </tr>
+      </table>
+
+      ${section('Due today', dueToday, 'Nothing due today — nice!')}
+      ${section('Overdue', overdue, 'No overdue tasks.')}
+      ${section('In progress', inProgress, 'No tasks in progress.')}
+      ${section('Blocked on a dependency', blockedByDeps, 'Nothing waiting on a dependency.')}
+
+      <div style="margin-top:32px">
+        <a href="${projectUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px">Open project →</a>
+      </div>
+      <p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">
+        You're receiving this because daily email notifications are turned on for this project. An admin can switch them off in Project Settings.
+      </p>
+    </div>
+  `
+}
+
+export function adminProjectPortfolioDigestEmailHtml(args: {
+  adminName: string
+  today: string
+  appUrl: string
+  projects: Array<{
+    id: string
+    name: string
+    startDate: string | null
+    endDate: string | null
+    total: number
+    completed: number
+    in_progress: number
+    pending: number
+    overdue: number
+    progressPct: number
+    owners: ProjectDigestOwnerSummary[]
+  }>
+}) {
+  const { adminName, today, appUrl, projects } = args
+
+  const projectBlock = (p: typeof projects[number]) => `
+    <div style="border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin:16px 0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <a href="${appUrl}/projects/${p.id}" style="font-size:15px;font-weight:600;color:#111827;text-decoration:none">${escapeHtml(p.name)}</a>
+        <span style="font-size:12px;color:#6b7280">${fmtDate(p.startDate)} – ${fmtDate(p.endDate)}</span>
+      </div>
+
+      <table style="width:100%;margin-top:10px">
+        <tr>
+          <td style="font-size:12px;color:#6b7280">Progress <strong style="color:#111827;font-size:14px">${p.progressPct}%</strong></td>
+          <td style="font-size:12px;color:#6b7280">Total <strong style="color:#111827;font-size:14px">${p.total}</strong></td>
+          <td style="font-size:12px;color:#1d4ed8">In progress <strong style="font-size:14px">${p.in_progress}</strong></td>
+          <td style="font-size:12px;color:#b45309">Pending <strong style="font-size:14px">${p.pending}</strong></td>
+          <td style="font-size:12px;color:${p.overdue > 0 ? '#b91c1c' : '#6b7280'}">Overdue <strong style="font-size:14px">${p.overdue}</strong></td>
+        </tr>
+      </table>
+
+      ${p.owners.length === 0 ? '' : `
+        <table style="width:100%;border-collapse:collapse;margin-top:12px">
+          <thead>
+            <tr style="background:#f9fafb">
+              <th style="padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280">Department</th>
+              <th style="padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280">Owner</th>
+              <th style="padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280">Progress</th>
+              <th style="padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280">Done</th>
+              <th style="padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280">Overdue</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${p.owners.map(o => `
+              <tr>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827">${escapeHtml(o.department)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151">${escapeHtml(o.ownerName)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151">${o.progressPct}%</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151">${o.completed}/${o.total}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:${o.overdue > 0 ? '#b91c1c' : '#374151'};font-weight:${o.overdue > 0 ? '600' : '400'}">${o.overdue}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `
+
+  return `
+    <div style="font-family:sans-serif;max-width:780px;margin:auto;padding:32px;background:#ffffff;color:#111827">
+      <div style="border-bottom:1px solid #e5e7eb;padding-bottom:16px;margin-bottom:8px">
+        <p style="margin:0;color:#6b7280;font-size:13px">${fmtDate(today)} · Project portfolio digest</p>
+        <h1 style="margin:8px 0 0;font-size:22px;color:#111827">${projects.length} active project${projects.length === 1 ? '' : 's'}</h1>
+        <p style="margin:8px 0 0;color:#374151;font-size:14px">Hi ${escapeHtml(adminName)},</p>
+      </div>
+
+      ${projects.length === 0
+        ? `<p style="color:#6b7280;font-size:14px;margin-top:24px">No projects have email notifications enabled.</p>`
+        : projects.map(projectBlock).join('')}
+
+      <div style="margin-top:24px">
+        <a href="${appUrl}/projects" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px">Open Projects →</a>
+      </div>
+      <p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">
+        You can turn off email notifications for individual projects from Project Settings.
+      </p>
+    </div>
+  `
+}
