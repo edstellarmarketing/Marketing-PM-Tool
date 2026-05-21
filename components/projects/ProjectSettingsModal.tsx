@@ -30,7 +30,11 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
     setError(null)
     setTestStatus(null)
     setSendingTest(true)
-    const res = await fetch('/api/admin/send-test-project-digest', { method: 'POST' })
+    const res = await fetch('/api/admin/send-test-project-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: project.id }),
+    })
     setSendingTest(false)
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {

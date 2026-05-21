@@ -3,12 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   sendEmail,
   projectOwnerDigestEmailHtml,
-  adminProjectPortfolioDigestEmailHtml,
+  adminProjectDigestEmailHtml,
   type ProjectDigestTask,
-  type ProjectDigestOwnerSummary,
 } from '@/lib/email'
+import { buildAdminProjectDigest } from '@/lib/project-digest'
 
-// Called by Vercel Cron daily at 02:30 UTC (08:00 IST)
+// Vercel Cron: 02:30 UTC daily = 08:00 IST
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -18,12 +18,10 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
-  // IST today
   const istOffset = 5.5 * 60 * 60 * 1000
   const nowIST = new Date(new Date().getTime() + istOffset)
   const today = nowIST.toISOString().slice(0, 10)
 
-  // 1. Projects with email notifications enabled
   const { data: projects, error: projectsErr } = await admin
     .from('projects')
     .select('id, name, start_date, end_date, notify_email_enabled')
@@ -31,16 +29,13 @@ export async function GET(req: NextRequest) {
     .neq('status', 'archived')
     .order('created_at', { ascending: false })
 
-  if (projectsErr) {
-    return NextResponse.json({ error: projectsErr.message }, { status: 500 })
-  }
+  if (projectsErr) return NextResponse.json({ error: projectsErr.message }, { status: 500 })
   if (!projects || projects.length === 0) {
     return NextResponse.json({ skipped: true, reason: 'No projects with notifications enabled' })
   }
 
   const projectIds = projects.map(p => p.id)
 
-  // 2. Parallel fetch
   const [
     { data: ownersRaw },
     { data: tasksRaw },
@@ -67,7 +62,6 @@ export async function GET(req: NextRequest) {
   const owners = ownersRaw ?? []
   const tasks = tasksRaw ?? []
 
-  // Index helpers
   const ownersByProject: Record<string, typeof owners> = {}
   for (const o of owners) {
     if (!ownersByProject[o.project_id]) ownersByProject[o.project_id] = []
@@ -80,7 +74,7 @@ export async function GET(req: NextRequest) {
     tasksByOwner[t.owner_id].push(t as ProjectDigestTask)
   }
 
-  function statsFor(taskList: ProjectDigestTask[]): { total: number; completed: number; in_progress: number; pending: number; overdue: number; progressPct: number } {
+  function statsFor(taskList: ProjectDigestTask[]) {
     let total = 0, completed = 0, in_progress = 0, pending = 0, overdue = 0
     for (const t of taskList) {
       total += 1
@@ -92,91 +86,68 @@ export async function GET(req: NextRequest) {
     return { total, completed, in_progress, pending, overdue, progressPct: total === 0 ? 0 : Math.round((completed / total) * 100) }
   }
 
-  // 3. Send owner digests
+  const adminProfiles = (profiles ?? []).filter(p => p.role === 'admin' && p.is_active)
+
   let ownerEmailsSent = 0
-  const adminProjectsBuckets: NonNullable<Parameters<typeof adminProjectPortfolioDigestEmailHtml>[0]['projects']>[number][] = []
+  let adminEmailsSent = 0
 
   for (const project of projects) {
     const projectOwners = ownersByProject[project.id] ?? []
-    const projectTasks: ProjectDigestTask[] = []
-    for (const o of projectOwners) {
-      projectTasks.push(...(tasksByOwner[o.id] ?? []))
-    }
-    const projectStats = statsFor(projectTasks)
 
-    const ownerSummaries: ProjectDigestOwnerSummary[] = []
-
+    // Per-owner mail — same as before
     for (const owner of projectOwners) {
       const ownerTasks = tasksByOwner[owner.id] ?? []
       const ownerStats = statsFor(ownerTasks)
       const ownerProfile = profileById[owner.user_id]
-      const ownerName = ownerProfile?.full_name ?? 'Owner'
-
-      ownerSummaries.push({
-        ownerName,
-        department: owner.department,
-        ...ownerStats,
-      })
-
       if (!ownerProfile?.is_active) continue
       const email = emailById[owner.user_id]
       if (!email) continue
+      if (ownerStats.total === 0) continue
 
       const dueToday = ownerTasks.filter(t => t.status !== 'completed' && t.due_date === today)
-      const overdue = ownerTasks.filter(t => t.status !== 'completed' && t.due_date && t.due_date < today)
+      const overdueList = ownerTasks.filter(t => t.status !== 'completed' && t.due_date && t.due_date < today)
       const inProgress = ownerTasks.filter(t => t.status === 'in_progress').slice(0, 15)
       const blockedByDeps = ownerTasks.filter(t => t.status !== 'completed' && !!t.dependency_task)
 
-      // Skip empty digests so we don't spam owners with nothing-to-do mails
-      if (ownerStats.total === 0) continue
-
       const html = projectOwnerDigestEmailHtml({
-        ownerName,
+        ownerName: ownerProfile.full_name,
         projectName: project.name,
         projectUrl: `${appUrl}/projects/${project.id}`,
         department: owner.department,
         today,
-        summary: ownerSummaries[ownerSummaries.length - 1],
+        summary: { ownerName: ownerProfile.full_name, department: owner.department, ...ownerStats },
         dueToday,
-        overdue,
+        overdue: overdueList,
         inProgress,
         blockedByDeps,
       })
-
       await sendEmail(email, `[${project.name}] Daily digest — ${owner.department}`, html)
       ownerEmailsSent += 1
     }
 
-    adminProjectsBuckets.push({
-      id: project.id,
-      name: project.name,
-      startDate: project.start_date,
-      endDate: project.end_date,
-      ...projectStats,
-      owners: ownerSummaries.sort((a, b) => a.department.localeCompare(b.department)),
-    })
-  }
-
-  // 4. Send admin consolidated digest
-  const adminProfiles = (profiles ?? []).filter(p => p.role === 'admin' && p.is_active)
-  let adminEmailsSent = 0
-
-  for (const a of adminProfiles) {
-    const email = emailById[a.id]
-    if (!email) continue
-    const html = adminProjectPortfolioDigestEmailHtml({
-      adminName: a.full_name,
+    // Per-project admin mail
+    const digestData = buildAdminProjectDigest({
+      project,
+      owners: projectOwners,
+      tasksByOwner,
+      profileById,
       today,
-      appUrl,
-      projects: adminProjectsBuckets,
     })
-    await sendEmail(email, `Project portfolio digest — ${today}`, html)
-    adminEmailsSent += 1
+    if (digestData.total === 0) continue
+
+    for (const a of adminProfiles) {
+      const email = emailById[a.id]
+      if (!email) continue
+      const html = adminProjectDigestEmailHtml({
+        adminName: a.full_name,
+        today,
+        appUrl,
+        project: digestData,
+      })
+      await sendEmail(email, `[${project.name}] Daily project digest — ${today}`, html)
+      adminEmailsSent += 1
+    }
   }
 
-  return NextResponse.json({
-    projects: projects.length,
-    ownerEmailsSent,
-    adminEmailsSent,
-  })
+  return NextResponse.json({ projects: projects.length, ownerEmailsSent, adminEmailsSent })
 }
