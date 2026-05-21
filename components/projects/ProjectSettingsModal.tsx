@@ -23,26 +23,34 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [sendingTest, setSendingTest] = useState(false)
+  const [sendingTest, setSendingTest] = useState<null | 'admin' | 'owner'>(null)
   const [testStatus, setTestStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleSendTestEmail() {
+  async function handleSendTestEmail(kind: 'admin' | 'owner') {
     setError(null)
     setTestStatus(null)
-    setSendingTest(true)
-    const res = await fetch('/api/admin/send-test-project-digest', {
+    setSendingTest(kind)
+    const url = kind === 'admin'
+      ? '/api/admin/send-test-project-digest'
+      : '/api/admin/send-test-owner-digest'
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: project.id }),
     })
-    setSendingTest(false)
+    setSendingTest(null)
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setError(typeof data.error === 'string' ? data.error : 'Failed to send test email')
       return
     }
-    setTestStatus(data.to ? `Sent to ${data.to}` : 'Sent')
+    if (kind === 'admin') {
+      setTestStatus(data.to ? `Admin digest sent to ${data.to}` : 'Sent')
+    } else {
+      const preview = data.preview ? ` (preview of ${data.previewedOwner}'s view)` : ''
+      setTestStatus(data.to ? `Owner digest sent to ${data.to}${preview}` : 'Sent')
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -196,16 +204,27 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
               </span>
             </label>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={handleSendTestEmail}
-                disabled={sendingTest || saving || deleting}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-              >
-                <Send size={13} />
-                {sendingTest ? 'Sending…' : 'Send test admin email to me'}
-              </button>
+            <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSendTestEmail('admin')}
+                  disabled={!!sendingTest || saving || deleting}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                >
+                  <Send size={13} />
+                  {sendingTest === 'admin' ? 'Sending…' : 'Send test admin email to me'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendTestEmail('owner')}
+                  disabled={!!sendingTest || saving || deleting}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                >
+                  <Send size={13} />
+                  {sendingTest === 'owner' ? 'Sending…' : 'Send test owner email to me'}
+                </button>
+              </div>
               {testStatus && (
                 <span className="text-xs text-emerald-700 dark:text-emerald-400">{testStatus}</span>
               )}
