@@ -487,30 +487,6 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function statusPill(status: string, overdue: boolean) {
-  if (overdue) return `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:9999px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">Overdue</span>`
-  const map: Record<string, { bg: string; fg: string; border: string; label: string }> = {
-    pending: { bg: '#fffbeb', fg: '#b45309', border: '#fde68a', label: 'Pending' },
-    in_progress: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', label: 'In Progress' },
-    completed: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', label: 'Completed' },
-  }
-  const s = map[status] ?? map.pending
-  return `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:9999px;background:${s.bg};color:${s.fg};border:1px solid ${s.border}">${s.label}</span>`
-}
-
-function taskRow(t: ProjectDigestTask, today: string) {
-  const overdue = t.status !== 'completed' && !!t.due_date && t.due_date < today
-  return `
-    <tr>
-      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:13px">${escapeHtml(t.title)}</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px">${statusPill(t.status, overdue)}</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px">${priorityBadge(t.priority)}</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:#374151;font-size:13px">${t.progress}%</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;color:${overdue ? '#b91c1c' : '#374151'};font-size:13px;white-space:nowrap">${fmtDate(t.due_date)}</td>
-    </tr>
-  `
-}
-
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
 }
@@ -522,66 +498,79 @@ export function projectOwnerDigestEmailHtml(args: {
   department: string
   today: string
   summary: ProjectDigestOwnerSummary
-  dueToday: ProjectDigestTask[]
-  overdue: ProjectDigestTask[]
-  inProgress: ProjectDigestTask[]
-  blockedByDeps: ProjectDigestTask[]
+  pendingToday: ProjectDigestTask[]
+  upcoming: ProjectDigestTask[]   // overdue first (highlighted), then by due date asc, capped at 10
 }) {
-  const { ownerName, projectName, projectUrl, department, today, summary, dueToday, overdue, inProgress, blockedByDeps } = args
+  const { ownerName, projectName, projectUrl, department, today, summary, pendingToday, upcoming } = args
 
   const statBox = (label: string, value: number | string, color = '#111827') => `
-    <td style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;text-align:center;width:20%">
+    <td style="padding:14px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;text-align:center;width:25%">
       <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">${label}</div>
       <div style="font-size:22px;font-weight:700;color:${color};margin-top:4px">${value}</div>
     </td>
   `
 
-  const section = (title: string, items: ProjectDigestTask[], emptyText: string) => `
-    <h3 style="margin:24px 0 8px;font-size:14px;color:#111827;font-weight:600">${title} ${items.length > 0 ? `<span style="color:#6b7280;font-weight:400">(${items.length})</span>` : ''}</h3>
-    ${items.length === 0 ? `<p style="color:#9ca3af;font-size:13px;margin:4px 0">${emptyText}</p>` : `
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="background:#f9fafb">
-            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Task</th>
-            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Status</th>
-            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Priority</th>
-            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Progress</th>
-            <th style="padding:8px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;letter-spacing:.05em">Due</th>
-          </tr>
-        </thead>
-        <tbody>${items.slice(0, 15).map(t => taskRow(t, today)).join('')}</tbody>
-      </table>
-    `}
+  const sectionTitle = (title: string, count: number) => `
+    <h3 style="margin:24px 0 4px;font-size:14px;color:#111827;font-weight:600">${title} <span style="color:#9ca3af;font-weight:400">(${count})</span></h3>
   `
+
+  const ownerTaskRow = (t: ProjectDigestTask) => {
+    const overdue = t.status !== 'completed' && !!t.due_date && t.due_date < today
+    const daysLate = overdue && t.due_date
+      ? Math.floor((Date.parse(today + 'T00:00:00Z') - Date.parse(t.due_date + 'T00:00:00Z')) / 86400000)
+      : 0
+    const rowBg = overdue ? 'background:#fef2f2' : ''
+    const titleColor = overdue ? '#b91c1c' : '#111827'
+    return `
+      <tr style="${rowBg}">
+        <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:${titleColor};font-weight:${overdue ? '600' : '400'}">${overdue ? '⚠ ' : ''}${escapeHtml(t.title)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${priorityBadge(t.priority)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:12px;color:${overdue ? '#b91c1c' : '#374151'};white-space:nowrap">
+          ${t.due_date ? fmtDate(t.due_date) : '—'}${overdue ? ` <span style="color:#b91c1c;font-weight:600">(${daysLate}d late)</span>` : ''}
+        </td>
+      </tr>
+    `
+  }
 
   return `
     <div style="font-family:sans-serif;max-width:680px;margin:auto;padding:32px;background:#ffffff;color:#111827">
-      <div style="border-bottom:1px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px">
-        <p style="margin:0;color:#6b7280;font-size:13px">${fmtDate(today)} · ${escapeHtml(department)} daily digest</p>
-        <h1 style="margin:8px 0 0;font-size:22px;color:#111827">${escapeHtml(projectName)}</h1>
-        <p style="margin:8px 0 0;color:#374151;font-size:14px">Hi ${escapeHtml(ownerName)},</p>
-      </div>
+      <p style="margin:0;color:#6b7280;font-size:13px">${fmtDate(today)} · ${escapeHtml(department)} daily digest</p>
+      <h1 style="margin:6px 0 4px;font-size:22px;color:#111827"><a href="${projectUrl}" style="color:#111827;text-decoration:none">${escapeHtml(projectName)}</a></h1>
+      <p style="margin:16px 0 0;color:#374151;font-size:14px">Hi ${escapeHtml(ownerName)},</p>
 
+      <p style="margin:20px 0 8px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Your ${escapeHtml(department)} tasks</p>
       <table style="width:100%;border-spacing:8px;margin-left:-8px">
         <tr>
-          ${statBox('Progress', `${summary.progressPct}%`, '#2563eb')}
           ${statBox('Total', summary.total)}
-          ${statBox('In Progress', summary.in_progress, '#1d4ed8')}
+          ${statBox('Completed', summary.completed, '#047857')}
           ${statBox('Pending', summary.pending, '#b45309')}
-          ${statBox('Overdue', summary.overdue, summary.overdue > 0 ? '#b91c1c' : '#111827')}
+          ${statBox('Progress', `${summary.progressPct}%`, '#2563eb')}
         </tr>
       </table>
+      <div style="height:6px;background:#e5e7eb;border-radius:9999px;overflow:hidden;margin-top:12px">
+        <div style="height:6px;background:#2563eb;width:${summary.progressPct}%"></div>
+      </div>
 
-      ${section('Due today', dueToday, 'Nothing due today — nice!')}
-      ${section('Overdue', overdue, 'No overdue tasks.')}
-      ${section('In progress', inProgress, 'No tasks in progress.')}
-      ${section('Blocked on a dependency', blockedByDeps, 'Nothing waiting on a dependency.')}
+      ${sectionTitle('Pending today', pendingToday.length)}
+      ${pendingToday.length === 0 ? `<p style="color:#9ca3af;font-size:13px;margin:4px 0">Nothing due today.</p>` : `
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <tbody>${pendingToday.map(ownerTaskRow).join('')}</tbody>
+        </table>
+      `}
 
-      <div style="margin-top:32px">
-        <a href="${projectUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px">Open project →</a>
+      ${sectionTitle('Upcoming tasks', upcoming.length)}
+      ${upcoming.length === 0 ? `<p style="color:#9ca3af;font-size:13px;margin:4px 0">No upcoming tasks.</p>` : `
+        <p style="margin:0 0 4px;font-size:12px;color:#6b7280">Overdue rows highlighted; then sorted by due date.</p>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <tbody>${upcoming.map(ownerTaskRow).join('')}</tbody>
+        </table>
+      `}
+
+      <div style="margin-top:28px">
+        <a href="${projectUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px">View all my tasks →</a>
       </div>
       <p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">
-        You're receiving this because daily email notifications are turned on for this project. An admin can switch them off in Project Settings.
+        Daily digest at 08:00 IST. Admin can turn this off in Project Settings.
       </p>
     </div>
   `

@@ -19,6 +19,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
     end_date: project.end_date ?? '',
     status: (project.status ?? 'active') as ProjectStatus,
     notify_email_enabled: project.notify_email_enabled ?? true,
+    notify_owner_email_enabled: project.notify_owner_email_enabled ?? true,
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -59,6 +60,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
         end_date: form.end_date || null,
         status: form.status,
         notify_email_enabled: form.notify_email_enabled,
+        notify_owner_email_enabled: form.notify_owner_email_enabled,
       }),
     })
 
@@ -159,6 +161,26 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
           </div>
 
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+              <Mail size={14} className="text-blue-600" />
+              Email notifications
+            </div>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.notify_owner_email_enabled}
+                onChange={e => setForm(p => ({ ...p, notify_owner_email_enabled: e.target.checked }))}
+                className="mt-1 rounded border-gray-300"
+              />
+              <span className="flex-1">
+                <span className="block text-sm text-gray-900 dark:text-white">Notify project owners daily</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Each owner gets a department digest at 08:00 IST (their tasks, pending today, upcoming).
+                </span>
+              </span>
+            </label>
+
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -167,15 +189,13 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
                 className="mt-1 rounded border-gray-300"
               />
               <span className="flex-1">
-                <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                  <Mail size={14} className="text-blue-600" />
-                  Email notifications
-                </span>
+                <span className="block text-sm text-gray-900 dark:text-white">Notify admins daily</span>
                 <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Send a daily 8 AM digest to each project owner with their tasks, and a consolidated portfolio summary to admins.
+                  Admins get a per-project digest at 08:00 IST with owner progress and top pending tasks.
                 </span>
               </span>
             </label>
+
             <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
               <button
                 type="button"
@@ -184,7 +204,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               >
                 <Send size={13} />
-                {sendingTest ? 'Sending…' : 'Send test email to me'}
+                {sendingTest ? 'Sending…' : 'Send test admin email to me'}
               </button>
               {testStatus && (
                 <span className="text-xs text-emerald-700 dark:text-emerald-400">{testStatus}</span>

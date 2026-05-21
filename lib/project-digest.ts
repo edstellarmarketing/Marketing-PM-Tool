@@ -5,6 +5,8 @@ import type {
   ProjectDigestTask,
 } from '@/lib/email'
 
+const UPCOMING_LIMIT = 10
+
 const PRIORITY_RANK: Record<string, number> = {
   critical: 0,
   high: 1,
@@ -127,4 +129,59 @@ export function buildAdminProjectDigest(args: {
     dueThisWeek,
     topPending,
   }
+}
+
+export interface OwnerProjectDigest {
+  summary: ProjectDigestOwnerSummary
+  pendingToday: ProjectDigestTask[]
+  upcoming: ProjectDigestTask[]   // overdue first (oldest first), then non-overdue by due date asc; capped at 10
+}
+
+export function buildOwnerProjectDigest(args: {
+  owner: { id: string; user_id: string; department: string }
+  tasks: ProjectDigestTask[]
+  today: string
+}): OwnerProjectDigest {
+  const { owner, tasks, today } = args
+
+  let total = 0, completed = 0, in_progress = 0, pending = 0, overdue = 0
+  for (const t of tasks) {
+    total += 1
+    if (t.status === 'completed') completed += 1
+    else if (t.status === 'in_progress') in_progress += 1
+    else pending += 1
+    if (t.status !== 'completed' && t.due_date && t.due_date < today) overdue += 1
+  }
+  const summary: ProjectDigestOwnerSummary = {
+    ownerName: '',
+    department: owner.department,
+    total,
+    completed,
+    in_progress,
+    pending,
+    overdue,
+    progressPct: total === 0 ? 0 : Math.round((completed / total) * 100),
+  }
+
+  const open = tasks.filter(t => t.status !== 'completed')
+
+  const pendingToday = open
+    .filter(t => t.due_date === today)
+    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9))
+
+  const overdueRows = open
+    .filter(t => t.due_date && t.due_date < today)
+    .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))   // oldest first
+
+  const upcomingRows = open
+    .filter(t => !t.due_date || t.due_date >= today)
+    .sort((a, b) => {
+      const ad = a.due_date ?? '9999'
+      const bd = b.due_date ?? '9999'
+      return ad.localeCompare(bd)
+    })
+
+  const upcoming = [...overdueRows, ...upcomingRows].slice(0, UPCOMING_LIMIT)
+
+  return { summary, pendingToday, upcoming }
 }

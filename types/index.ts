@@ -269,6 +269,7 @@ export interface Project {
   status: ProjectStatus
   color: string | null
   notify_email_enabled: boolean
+  notify_owner_email_enabled: boolean
   created_by: string
   created_at: string
   updated_at: string

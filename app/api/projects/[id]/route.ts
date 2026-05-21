@@ -11,6 +11,7 @@ const updateSchema = z.object({
   color: z.string().max(20).nullable().optional(),
   status: z.enum(['active', 'on_hold', 'completed', 'archived']).optional(),
   notify_email_enabled: z.boolean().optional(),
+  notify_owner_email_enabled: z.boolean().optional(),
 })
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
