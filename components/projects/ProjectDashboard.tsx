@@ -4,10 +4,11 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
+import ProjectSettingsModal from './ProjectSettingsModal'
 import type { Project, ProjectTask, Profile, ProjectOwner } from '@/types'
 
 interface Props {
@@ -54,6 +55,9 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const [page, setPage] = useState(1)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -104,6 +108,44 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
 
   const canAddTask = owners.length > 0
 
+  function toggleRow(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllFiltered() {
+    const filteredIds = filtered.map(t => t.id)
+    const allChecked = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id))
+    setSelectedIds(allChecked ? new Set() : new Set(filteredIds))
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return
+    const n = selectedIds.size
+    if (!confirm(`Permanently delete ${n} task${n === 1 ? '' : 's'}? This removes them from the database and cannot be undone.`)) return
+    setDeletingBulk(true)
+    const res = await fetch(`/api/projects/${project.id}/tasks/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    })
+    setDeletingBulk(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(typeof data.error === 'string' ? data.error : 'Failed to delete selected tasks')
+      return
+    }
+    setSelectedIds(new Set())
+    router.refresh()
+  }
+
+  const filteredCount = filtered.length
+  const allFilteredSelected = filteredCount > 0 && filtered.every(t => selectedIds.has(t.id))
+  const someFilteredSelected = !allFilteredSelected && filtered.some(t => selectedIds.has(t.id))
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -122,9 +164,20 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">{project.description}</p>
             )}
           </div>
-          <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 whitespace-nowrap">
-            <Calendar size={14} />
-            <span>{formatDate(project.start_date)} – {formatDate(project.end_date)}</span>
+          <div className="flex items-center gap-3 whitespace-nowrap">
+            <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+              <Calendar size={14} />
+              <span>{formatDate(project.start_date)} – {formatDate(project.end_date)}</span>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Project settings"
+              >
+                <Settings size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -302,11 +355,48 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
           </div>
         </div>
 
+        {/* Bulk action bar */}
+        {isAdmin && selectedIds.size > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 mt-3 mx-4 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900">
+            <p className="text-sm text-blue-900 dark:text-blue-200">
+              <strong>{selectedIds.size}</strong> selected
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="px-3 py-1 text-xs text-blue-700 dark:text-blue-300 hover:underline"
+              >
+                Clear
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={deletingBulk}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                <Trash2 size={13} />
+                {deletingBulk ? 'Deleting…' : `Delete ${selectedIds.size} permanently`}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Task table */}
         <div className="mt-3 overflow-x-auto">
           <table className="text-sm min-w-[2200px] w-full">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
+                {isAdmin && (
+                  <th className="px-3 py-2 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      ref={el => { if (el) el.indeterminate = someFilteredSelected }}
+                      onChange={toggleAllFiltered}
+                      title={allFilteredSelected ? 'Deselect all' : 'Select all filtered tasks'}
+                      className="rounded border-gray-300"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-2 font-medium w-64">Task</th>
                 <th className="px-4 py-2 font-medium w-28 whitespace-nowrap">Status</th>
                 <th className="px-4 py-2 font-medium w-24">Priority</th>
@@ -325,7 +415,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={isAdmin ? 14 : 13} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -340,7 +430,17 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                   const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
                   const projectOwner = taskOwner?.user ?? null
                   return (
-                    <tr key={t.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}>
+                      {isAdmin && (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(t.id)}
+                            onChange={() => toggleRow(t.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <button
                           onClick={() => setEditingTask(t)}
@@ -511,6 +611,13 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
           isAdmin={isAdmin}
           onClose={() => setEditingTask(null)}
           onCreated={() => { setEditingTask(null); router.refresh() }}
+        />
+      )}
+
+      {settingsOpen && (
+        <ProjectSettingsModal
+          project={project}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
     </div>
