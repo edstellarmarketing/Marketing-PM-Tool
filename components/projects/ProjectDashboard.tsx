@@ -57,6 +57,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
 
   const today = new Date().toISOString().slice(0, 10)
   const ownersById = useMemo(() => new Map(owners.map(o => [o.id, o])), [owners])
+  const membersById = useMemo(() => new Map(allMembers.map(m => [m.id, m])), [allMembers])
 
   const stats = useMemo(() => {
     let total = 0, completed = 0, in_progress = 0, pending = 0, overdue = 0
@@ -404,8 +405,26 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                        {t.dependency_owner ? t.dependency_owner : <span className="text-gray-400">—</span>}
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {(() => {
+                          const dep = t.dependency_owner_id ? membersById.get(t.dependency_owner_id) : null
+                          if (dep) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                {dep.avatar_url ? (
+                                  <img src={dep.avatar_url} alt={dep.full_name} className="w-5 h-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[9px] font-bold flex items-center justify-center">
+                                    {initials(dep.full_name)}
+                                  </div>
+                                )}
+                                <span className="text-gray-700 dark:text-gray-300">{dep.full_name}</span>
+                              </div>
+                            )
+                          }
+                          if (t.dependency_owner) return <span className="text-gray-700 dark:text-gray-300">{t.dependency_owner}</span>
+                          return <span className="text-gray-400">—</span>
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {t.final_comments ? (
@@ -465,6 +484,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
           projectId={project.id}
           owners={owners}
           defaultOwnerId={activeOwnerId !== 'all' ? activeOwnerId : (owners[0]?.id ?? null)}
+          allMembers={allMembers}
           onClose={() => setDrawerOpen(false)}
           onCreated={() => { setDrawerOpen(false); router.refresh() }}
         />
@@ -476,6 +496,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
           owners={owners}
           defaultOwnerId={editingTask.owner_id}
           task={editingTask}
+          allMembers={allMembers}
           onClose={() => setEditingTask(null)}
           onCreated={() => { setEditingTask(null); router.refresh() }}
         />

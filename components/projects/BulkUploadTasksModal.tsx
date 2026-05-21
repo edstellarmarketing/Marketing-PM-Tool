@@ -3,11 +3,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { X, Upload, Download, Check, AlertCircle, Copy } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import type { ProjectOwner } from '@/types'
+import type { Profile, ProjectOwner } from '@/types'
 
 interface Props {
   projectId: string
   owner: ProjectOwner
+  allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   onClose: () => void
   onImported: () => void
 }
@@ -25,7 +26,8 @@ interface MappedRow {
   dependency_task: string | null
   dependency_details: string | null
   dependency_status: string | null
-  dependency_owner: string | null
+  dependency_owner_id: string | null
+  _depOwnerRaw?: string
   final_comments: string | null
   _error?: string
 }
@@ -158,7 +160,7 @@ Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Cri
 Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,2026-06-15,2026-06-25,,,,,
 `
 
-export default function BulkUploadTasksModal({ projectId, owner, onClose, onImported }: Props) {
+export default function BulkUploadTasksModal({ projectId, owner, allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
@@ -186,6 +188,15 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
 
   // Project owner is derived from the owner this upload is scoped to; we don't ask for it in the CSV.
   const projectOwnerName = owner.user?.full_name ?? '—'
+
+  function resolveProfile(raw: unknown): string | null {
+    const s = String(raw ?? '').trim().toLowerCase()
+    if (!s) return null
+    const hit = allMembers.find(m => m.full_name.toLowerCase() === s)
+      ?? allMembers.find(m => m.full_name.toLowerCase().startsWith(s))
+      ?? allMembers.find(m => m.full_name.toLowerCase().includes(s))
+    return hit?.id ?? null
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -245,19 +256,21 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
       const dependency_task = mapping.dependency_task ? (String(row[mapping.dependency_task] ?? '').trim() || null) : null
       const dependency_details = mapping.dependency_details ? (String(row[mapping.dependency_details] ?? '').trim() || null) : null
       const dependency_status = mapping.dependency_status ? (String(row[mapping.dependency_status] ?? '').trim() || null) : null
-      const dependency_owner = mapping.dependency_owner ? (String(row[mapping.dependency_owner] ?? '').trim() || null) : null
+      const depOwnerRaw = mapping.dependency_owner ? String(row[mapping.dependency_owner] ?? '').trim() : ''
+      const dependency_owner_id = depOwnerRaw ? resolveProfile(depOwnerRaw) : null
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
 
       const err = !title ? 'Title is empty' : undefined
 
       return {
         title, description, status, priority, progress, start_date, due_date,
-        dependency_task, dependency_details, dependency_status, dependency_owner,
+        dependency_task, dependency_details, dependency_status, dependency_owner_id,
+        _depOwnerRaw: depOwnerRaw,
         final_comments,
         _error: err,
       }
     })
-  }, [rawRows, mapping])
+  }, [rawRows, mapping, allMembers])
 
   const validRows = useMemo(() => mappedRows.filter(r => !r._error), [mappedRows])
   const importable = useMemo(() => mappedRows.filter(r => r.title), [mappedRows])
@@ -282,7 +295,7 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
           dependency_task: r.dependency_task,
           dependency_details: r.dependency_details,
           dependency_status: r.dependency_status,
-          dependency_owner: r.dependency_owner,
+          dependency_owner_id: r.dependency_owner_id,
           final_comments: r.final_comments,
         })),
       }),
@@ -457,7 +470,17 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                           {r.dependency_details ?? <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_status ?? <span className="text-gray-400">—</span>}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_owner ?? <span className="text-gray-400">—</span>}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          {r.dependency_owner_id ? (
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {allMembers.find(m => m.id === r.dependency_owner_id)?.full_name}
+                            </span>
+                          ) : r._depOwnerRaw ? (
+                            <span className="text-amber-700 dark:text-amber-400" title="No matching user — will import with no dependency owner">
+                              {r._depOwnerRaw} (no match)
+                            </span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.final_comments ?? undefined}>
                           {r.final_comments ?? <span className="text-gray-400">—</span>}
                         </td>
@@ -474,6 +497,15 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                   {blockedCount} row{blockedCount === 1 ? '' : 's'} will be skipped (missing title).
                 </p>
               )}
+              {(() => {
+                const unmatched = mappedRows.filter(r => r._depOwnerRaw && !r.dependency_owner_id).length
+                if (unmatched === 0) return null
+                return (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                    {unmatched} row{unmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user in the PM tool — those tasks will import with no dependency owner. Add the user first or correct the name to set it.
+                  </p>
+                )
+              })()}
             </div>
           )}
         </div>
