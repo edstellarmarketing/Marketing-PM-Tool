@@ -395,9 +395,10 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {t.dependency_details ? (
-                          <p className="line-clamp-2 text-gray-700 dark:text-gray-300" title={t.dependency_details}>
-                            {t.dependency_details}
-                          </p>
+                          <div
+                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
+                            dangerouslySetInnerHTML={{ __html: t.dependency_details }}
+                          />
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}

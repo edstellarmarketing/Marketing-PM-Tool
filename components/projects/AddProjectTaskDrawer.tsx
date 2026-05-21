@@ -244,27 +244,23 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Status</label>
-                <input
-                  type="text"
-                  value={form.dependency_status}
-                  onChange={e => setForm(p => ({ ...p, dependency_status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Pending / In Review / Done…"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Details</label>
-                <input
-                  type="text"
-                  value={form.dependency_details}
-                  onChange={e => setForm(p => ({ ...p, dependency_details: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Why it's blocking"
-                />
-              </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Status</label>
+              <input
+                type="text"
+                value={form.dependency_status}
+                onChange={e => setForm(p => ({ ...p, dependency_status: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Pending / In Review / Done…"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Details</label>
+              <RichTextEditor
+                value={form.dependency_details}
+                onChange={html => setForm(p => ({ ...p, dependency_details: html }))}
+                placeholder="Why it's blocking, what's needed, and from whom…"
+              />
             </div>
           </div>
 
