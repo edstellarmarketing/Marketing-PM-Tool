@@ -11,11 +11,12 @@ interface Props {
   defaultOwnerId: string | null
   task?: ProjectTask | null
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
+  isAdmin: boolean
   onClose: () => void
   onCreated: () => void
 }
 
-export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, allMembers, onClose, onCreated }: Props) {
+export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, allMembers, isAdmin, onClose, onCreated }: Props) {
   const isEdit = !!task
 
   const [form, setForm] = useState({
@@ -293,7 +294,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             >
               Cancel
             </button>
-            {isEdit && (
+            {isEdit && isAdmin && (
               <button
                 type="button"
                 onClick={handleDelete}

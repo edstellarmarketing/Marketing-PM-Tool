@@ -9,6 +9,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const isAdmin = profile?.role === 'admin'
+
   const { data: project } = await supabase
     .from('projects')
     .select('*')
@@ -53,6 +56,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       tasks={tasks}
       owners={ownersWithMembers}
       allMembers={allMembers}
+      isAdmin={isAdmin}
     />
   )
 }

@@ -17,6 +17,7 @@ interface ProjectStats {
 interface Props {
   projects: Project[]
   stats: Record<string, ProjectStats>
+  isAdmin: boolean
 }
 
 function formatDate(d: string | null) {
@@ -29,7 +30,7 @@ function progress(s?: ProjectStats) {
   return Math.round((s.completed / s.total) * 100)
 }
 
-export default function ProjectsClient({ projects, stats }: Props) {
+export default function ProjectsClient({ projects, stats, isAdmin }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -41,27 +42,35 @@ export default function ProjectsClient({ projects, stats }: Props) {
             {projects.length} project{projects.length === 1 ? '' : 's'}
           </p>
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          New Project
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            New Project
+          </button>
+        )}
       </div>
 
       {projects.length === 0 ? (
         <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-12 text-center">
           <FolderKanban size={36} className="mx-auto text-gray-400 mb-3" />
-          <p className="text-gray-600 dark:text-gray-300 font-medium">No projects yet</p>
-          <p className="text-sm text-gray-500 mt-1">Create your first project to organize tasks by initiative.</p>
-          <button
-            onClick={() => setOpen(true)}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-          >
-            <Plus size={16} />
-            New Project
-          </button>
+          <p className="text-gray-600 dark:text-gray-300 font-medium">{isAdmin ? 'No projects yet' : 'No projects assigned to you yet'}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isAdmin
+              ? 'Create your first project to organize tasks by initiative.'
+              : 'Once an admin assigns you to a project, it will show up here.'}
+          </p>
+          {isAdmin && (
+            <button
+              onClick={() => setOpen(true)}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+            >
+              <Plus size={16} />
+              New Project
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -8,6 +8,9 @@ export default async function ProjectsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const isAdmin = profile?.role === 'admin'
+
   const { data: projects } = await supabase
     .from('projects')
     .select('*')
@@ -36,5 +39,5 @@ export default async function ProjectsPage() {
     }, {})
   }
 
-  return <ProjectsClient projects={projectList} stats={taskStats} />
+  return <ProjectsClient projects={projectList} stats={taskStats} isAdmin={isAdmin} />
 }

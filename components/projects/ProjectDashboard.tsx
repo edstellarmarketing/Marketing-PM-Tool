@@ -15,6 +15,7 @@ interface Props {
   tasks: ProjectTask[]
   owners: ProjectOwner[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
+  isAdmin: boolean
 }
 
 const PAGE_SIZE = 10
@@ -46,7 +47,7 @@ const priorityStyle: Record<string, string> = {
   critical: 'text-red-600',
 }
 
-export default function ProjectDashboard({ project, tasks, owners, allMembers }: Props) {
+export default function ProjectDashboard({ project, tasks, owners, allMembers, isAdmin }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
@@ -195,6 +196,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
               owners={owners}
               allMembers={allMembers}
               ownerStats={ownerStats}
+              isAdmin={isAdmin}
               onChange={() => router.refresh()}
             />
           </div>
@@ -493,6 +495,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
           owners={owners}
           defaultOwnerId={activeOwnerId !== 'all' ? activeOwnerId : (owners[0]?.id ?? null)}
           allMembers={allMembers}
+          isAdmin={isAdmin}
           onClose={() => setDrawerOpen(false)}
           onCreated={() => { setDrawerOpen(false); router.refresh() }}
         />
@@ -505,6 +508,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
           defaultOwnerId={editingTask.owner_id}
           task={editingTask}
           allMembers={allMembers}
+          isAdmin={isAdmin}
           onClose={() => setEditingTask(null)}
           onCreated={() => { setEditingTask(null); router.refresh() }}
         />

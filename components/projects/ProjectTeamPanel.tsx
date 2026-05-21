@@ -19,6 +19,7 @@ interface Props {
   owners: ProjectOwner[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   ownerStats?: Record<string, OwnerStat>
+  isAdmin: boolean
   onChange: () => void
 }
 
@@ -38,7 +39,7 @@ function Avatar({ user, size = 6 }: { user: Pick<Profile, 'id' | 'full_name' | '
   )
 }
 
-export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerStats, onChange }: Props) {
+export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerStats, isAdmin, onChange }: Props) {
   const [showAddOwner, setShowAddOwner] = useState(owners.length === 0)
   const [newOwner, setNewOwner] = useState({ user_id: '', department: '' })
   const [memberSelectOwnerId, setMemberSelectOwnerId] = useState<string | null>(null)
@@ -116,7 +117,9 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
       )}
 
       {owners.length === 0 && !showAddOwner && (
-        <div className="text-sm text-gray-500 dark:text-gray-400">No owners yet. Add one to start creating tasks.</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {isAdmin ? 'No owners yet. Add one to start creating tasks.' : 'No owners assigned yet. An admin will set up the project team.'}
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -134,14 +137,16 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
                     <p className="text-xs text-gray-500 dark:text-gray-400">{owner.department}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => removeOwner(owner.id)}
-                  disabled={busy}
-                  className="p-1 text-gray-400 hover:text-red-600"
-                  title="Remove owner"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => removeOwner(owner.id)}
+                    disabled={busy}
+                    className="p-1 text-gray-400 hover:text-red-600"
+                    title="Remove owner"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
 
               <button
@@ -179,16 +184,18 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
                     <span key={m.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-xs text-gray-700 dark:text-gray-200">
                       <Avatar user={m.user} size={5} />
                       {m.user.full_name}
-                      <button
-                        onClick={() => removeMember(owner.id, m.id)}
-                        className="text-gray-400 hover:text-red-600"
-                        disabled={busy}
-                      >
-                        <X size={11} />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => removeMember(owner.id, m.id)}
+                          className="text-gray-400 hover:text-red-600"
+                          disabled={busy}
+                        >
+                          <X size={11} />
+                        </button>
+                      )}
                     </span>
                   ))}
-                  {memberSelectOwnerId === owner.id ? (
+                  {!isAdmin ? null : memberSelectOwnerId === owner.id ? (
                     <div className="flex items-center gap-1.5">
                       <select
                         autoFocus
@@ -231,7 +238,7 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
         })}
       </div>
 
-      {showAddOwner ? (
+      {!isAdmin ? null : showAddOwner ? (
         <form onSubmit={addOwner} className="border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 rounded-lg p-3 flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[180px]">
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Owner</label>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser } from '@/lib/api'
+import { getAuthUser, requireAdmin } from '@/lib/api'
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -42,8 +42,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { user, error } = await getAuthUser()
-  if (error || !user) return error ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile, error } = await requireAdmin()
+  if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const supabase = await createClient()
   const { error: dbError } = await supabase.from('project_tasks').delete().eq('id', id)

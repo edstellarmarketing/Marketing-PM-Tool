@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser } from '@/lib/api'
+import { getAuthUser, requireAdmin } from '@/lib/api'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -27,8 +27,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, error } = await getAuthUser()
-  if (error || !user) return error ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile, error } = await requireAdmin()
+  if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       end_date: parsed.data.end_date || null,
       color: parsed.data.color ?? null,
       status: parsed.data.status ?? 'active',
-      created_by: user.id,
+      created_by: profile.id,
     })
     .select()
     .single()

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser } from '@/lib/api'
+import { requireAdmin } from '@/lib/api'
 
 const createSchema = z.object({
   user_id: z.string().uuid(),
@@ -9,8 +9,8 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string; ownerId: string }> }) {
   const { ownerId } = await params
-  const { user, error } = await getAuthUser()
-  if (error || !user) return error ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile, error } = await requireAdmin()
+  if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
