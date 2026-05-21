@@ -1,0 +1,7 @@
+Title,Description,Status,Priority,Progress,Assignee,Due Date
+Header design,Build the responsive site header with sticky navigation,In Progress,High,40,Jane Smith,6/15/2026
+Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,,6/20/2026
+Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,Jane Smith,6/22/2026
+SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,Lokesh,5/30/2026
+Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,Vaibhav,6/10/2026
+Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,,6/25/2026

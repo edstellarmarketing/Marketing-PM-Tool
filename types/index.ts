@@ -257,6 +257,58 @@ export interface AttendanceMonthSummary {
   bonus_awarded: boolean
 }
 
+export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived'
+export type ProjectTaskStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface Project {
+  id: string
+  name: string
+  description: string | null
+  start_date: string | null
+  end_date: string | null
+  status: ProjectStatus
+  color: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectTask {
+  id: string
+  project_id: string
+  owner_id: string | null
+  title: string
+  description: string | null
+  category: string | null
+  priority: Priority
+  status: ProjectTaskStatus
+  progress: number
+  assignee_id: string | null
+  due_date: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  assignee?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
+}
+
+export interface ProjectOwner {
+  id: string
+  project_id: string
+  user_id: string
+  department: string
+  created_at: string
+  user?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
+  members?: ProjectOwnerMember[]
+}
+
+export interface ProjectOwnerMember {
+  id: string
+  owner_id: string
+  user_id: string
+  created_at: string
+  user?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
+}
+
 export type DateChangeRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export interface TaskDateChangeRequest {
