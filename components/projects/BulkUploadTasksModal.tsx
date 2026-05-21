@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { X, Upload, Download, Check, AlertCircle, Copy } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import type { Profile, ProjectOwner } from '@/types'
+import type { ProjectOwner } from '@/types'
 
 interface Props {
   projectId: string
@@ -20,13 +20,20 @@ interface MappedRow {
   status: 'pending' | 'in_progress' | 'completed'
   priority: 'low' | 'medium' | 'high' | 'critical'
   progress: number
-  assignee_id: string | null
   due_date: string | null
-  _assigneeRaw?: string
+  dependency_task: string | null
+  dependency_details: string | null
+  dependency_status: string | null
+  dependency_owner: string | null
+  final_comments: string | null
   _error?: string
 }
 
-const FIELD_KEYS = ['title', 'description', 'status', 'priority', 'progress', 'assignee', 'due_date'] as const
+const FIELD_KEYS = [
+  'title', 'description', 'status', 'priority', 'progress', 'due_date',
+  'dependency_task', 'dependency_details', 'dependency_status', 'dependency_owner',
+  'final_comments',
+] as const
 type FieldKey = typeof FIELD_KEYS[number]
 
 const FIELD_LABELS: Record<FieldKey, string> = {
@@ -35,8 +42,12 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   status: 'Status',
   priority: 'Priority',
   progress: 'Progress %',
-  assignee: 'Assignee',
   due_date: 'Due Date',
+  dependency_task: 'Dependency Task',
+  dependency_details: 'Dependency Details',
+  dependency_status: 'Dependency Status',
+  dependency_owner: 'Dependency Owner',
+  final_comments: 'Final Comments',
 }
 
 // Common header variants → canonical field
@@ -46,8 +57,12 @@ const HEADER_HINTS: Record<FieldKey, string[]> = {
   status: ['status'],
   priority: ['priority'],
   progress: ['progress', 'progress %', 'progress percent', '%'],
-  assignee: ['assignee', 'owner', 'frontend owner', 'front end owner', 'backend', 'back end', 'assigned to', 'assignee name'],
   due_date: ['due date', 'due', 'end date', 'end', 'deadline'],
+  dependency_task: ['dependency task', 'dependency', 'depends on', 'blocked by', 'dependent task', 'dependency name'],
+  dependency_details: ['dependency details', 'dependency description', 'dependency notes', 'dependency info'],
+  dependency_status: ['dependency status', 'dep status', 'dependency state'],
+  dependency_owner: ['dependency owner', 'dep owner', 'dependency assignee', 'dependency person', 'dependency contact'],
+  final_comments: ['final comments', 'final comment', 'owner comments', 'wrap up', 'wrap-up', 'closing comments', 'summary'],
 }
 
 function normaliseHeader(h: string) {
@@ -56,7 +71,9 @@ function normaliseHeader(h: string) {
 
 function autoMap(headers: string[]): Record<FieldKey, string | null> {
   const out: Record<FieldKey, string | null> = {
-    title: null, description: null, status: null, priority: null, progress: null, assignee: null, due_date: null,
+    title: null, description: null, status: null, priority: null, progress: null, due_date: null,
+    dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
+    final_comments: null,
   }
   const norm = headers.map(h => ({ raw: h, norm: normaliseHeader(h) }))
   for (const key of FIELD_KEYS) {
@@ -129,13 +146,13 @@ function parseDate(raw: unknown): string | null {
   return null
 }
 
-const TEMPLATE_CSV = `Title,Description,Status,Priority,Progress,Assignee,Due Date
-Header design,Build the responsive site header with sticky navigation,In Progress,High,40,Jane Smith,2026-06-15
-Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,,2026-06-20
-Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,Jane Smith,2026-06-22
-SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,Lokesh,2026-05-30
-Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,Vaibhav,2026-06-10
-Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,,2026-06-25
+const TEMPLATE_CSV = `Title,Description,Status,Priority,Progress,Due Date,Dependency Task,Dependency Details,Dependency Status,Dependency Owner,Final Comments
+Header design,Build the responsive site header with sticky navigation,In Progress,High,40,2026-06-15,Brand guidelines sign-off,Need final logo + colour tokens before final pass,In Review,Marketing,Awaiting brand sign-off; once approved, can wrap in a day.
+Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,2026-06-20,,,,,
+Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,2026-06-22,Hero copy approval,Awaiting final hero copy from content team,Pending,Content,Blocked until content team finalises copy.
+SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,2026-05-30,,,,,Done — all audit items addressed.
+Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,2026-06-10,API error contract,Backend needs to standardise validation error payload,In Progress,Backend,Frontend pieces done; integration paused on backend contract.
+Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,2026-06-25,,,,,
 `
 
 export default function BulkUploadTasksModal({ projectId, owner, onClose, onImported }: Props) {
@@ -143,7 +160,9 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>({
-    title: null, description: null, status: null, priority: null, progress: null, assignee: null, due_date: null,
+    title: null, description: null, status: null, priority: null, progress: null, due_date: null,
+    dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
+    final_comments: null,
   })
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -162,22 +181,8 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
     }
   }
 
-  // Build pool for assignee lookup: owner + their members
-  const assigneePool = useMemo<Pick<Profile, 'id' | 'full_name'>[]>(() => {
-    const list: Pick<Profile, 'id' | 'full_name'>[] = []
-    if (owner.user) list.push({ id: owner.user.id, full_name: owner.user.full_name })
-    owner.members?.forEach(m => { if (m.user) list.push({ id: m.user.id, full_name: m.user.full_name }) })
-    return list
-  }, [owner])
-
-  function findAssigneeId(raw: unknown): string | null {
-    const s = String(raw ?? '').trim().toLowerCase()
-    if (!s) return null
-    const hit = assigneePool.find(p => p.full_name.toLowerCase() === s)
-      ?? assigneePool.find(p => p.full_name.toLowerCase().startsWith(s))
-      ?? assigneePool.find(p => p.full_name.toLowerCase().includes(s))
-    return hit?.id ?? null
-  }
+  // Project owner is derived from the owner this upload is scoped to; we don't ask for it in the CSV.
+  const projectOwnerName = owner.user?.full_name ?? '—'
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -204,6 +209,13 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
 
   const mappedRows = useMemo<MappedRow[]>(() => {
     if (!mapping.title) return []
+    const mappedColumns = new Set(
+      [mapping.title, mapping.description, mapping.status, mapping.priority,
+        mapping.progress, mapping.due_date,
+        mapping.dependency_task, mapping.dependency_details, mapping.dependency_status, mapping.dependency_owner,
+        mapping.final_comments]
+        .filter((v): v is string => !!v)
+    )
     return rawRows.map(row => {
       const title = String(row[mapping.title!] ?? '').trim()
       // Pull additional context columns into the description if present
@@ -214,10 +226,9 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
       }
       // Always pull reference/url and page-type-style columns when not mapped explicitly
       Object.entries(row).forEach(([k, v]) => {
-        const norm = normaliseHeader(k)
-        if (k === mapping.title || k === mapping.description || k === mapping.status
-          || k === mapping.priority || k === mapping.progress || k === mapping.assignee || k === mapping.due_date) return
+        if (mappedColumns.has(k)) return
         if (v === null || v === undefined || String(v).trim() === '') return
+        const norm = normaliseHeader(k)
         if (/(referance|reference|link|url|page type|category|comments|notes)/.test(norm)) {
           descParts.push(`${k}: ${String(v).trim()}`)
         }
@@ -226,17 +237,25 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
       const status = mapping.status ? parseStatus(row[mapping.status]) : 'pending'
       const priority = mapping.priority ? parsePriority(row[mapping.priority]) : 'medium'
       const progress = mapping.progress ? parseProgress(row[mapping.progress]) : (status === 'completed' ? 100 : 0)
-      const assigneeRaw = mapping.assignee ? String(row[mapping.assignee] ?? '').trim() : ''
-      const assignee_id = assigneeRaw ? findAssigneeId(assigneeRaw) : null
       const due_date = mapping.due_date ? parseDate(row[mapping.due_date]) : null
+      const dependency_task = mapping.dependency_task ? (String(row[mapping.dependency_task] ?? '').trim() || null) : null
+      const dependency_details = mapping.dependency_details ? (String(row[mapping.dependency_details] ?? '').trim() || null) : null
+      const dependency_status = mapping.dependency_status ? (String(row[mapping.dependency_status] ?? '').trim() || null) : null
+      const dependency_owner = mapping.dependency_owner ? (String(row[mapping.dependency_owner] ?? '').trim() || null) : null
+      const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
 
-      const err = !title ? 'Title is empty' : (assigneeRaw && !assignee_id ? `No team member matches "${assigneeRaw}"` : undefined)
+      const err = !title ? 'Title is empty' : undefined
 
-      return { title, description, status, priority, progress, assignee_id, due_date, _assigneeRaw: assigneeRaw, _error: err }
+      return {
+        title, description, status, priority, progress, due_date,
+        dependency_task, dependency_details, dependency_status, dependency_owner,
+        final_comments,
+        _error: err,
+      }
     })
-  }, [rawRows, mapping, assigneePool])
+  }, [rawRows, mapping])
 
-  const validRows = useMemo(() => mappedRows.filter(r => !r._error || r._error.startsWith('No team member')), [mappedRows])
+  const validRows = useMemo(() => mappedRows.filter(r => !r._error), [mappedRows])
   const importable = useMemo(() => mappedRows.filter(r => r.title), [mappedRows])
   const blockedCount = mappedRows.length - importable.length
 
@@ -254,8 +273,12 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
           status: r.status,
           priority: r.priority,
           progress: r.progress,
-          assignee_id: r.assignee_id,
           due_date: r.due_date,
+          dependency_task: r.dependency_task,
+          dependency_details: r.dependency_details,
+          dependency_status: r.dependency_status,
+          dependency_owner: r.dependency_owner,
+          final_comments: r.final_comments,
         })),
       }),
     })
@@ -405,7 +428,9 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                       <th className="px-2 py-1.5 font-medium">Priority</th>
                       <th className="px-2 py-1.5 font-medium">Progress</th>
                       <th className="px-2 py-1.5 font-medium">Due</th>
-                      <th className="px-2 py-1.5 font-medium">Assignee</th>
+                      <th className="px-2 py-1.5 font-medium">Project Owner</th>
+                      <th className="px-2 py-1.5 font-medium">Dependency</th>
+                      <th className="px-2 py-1.5 font-medium">Final Comments</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,10 +441,17 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.due_date ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{projectOwnerName}</td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">
-                          {r.assignee_id ? assigneePool.find(p => p.id === r.assignee_id)?.full_name
-                            : r._assigneeRaw ? <span className="text-amber-700 dark:text-amber-400">{r._assigneeRaw} (no match)</span>
-                            : <span className="text-gray-400">Unassigned</span>}
+                          {r.dependency_task ? (
+                            <span title={[r.dependency_details, r.dependency_status, r.dependency_owner].filter(Boolean).join(' • ')}>
+                              {r.dependency_task}
+                              {r.dependency_owner && <span className="text-gray-400"> ({r.dependency_owner})</span>}
+                            </span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.final_comments ?? undefined}>
+                          {r.final_comments ?? <span className="text-gray-400">—</span>}
                         </td>
                       </tr>
                     ))}
@@ -431,7 +463,7 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
               )}
               {blockedCount > 0 && (
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                  {blockedCount} row{blockedCount === 1 ? '' : 's'} will be skipped (missing title). Assignee-mismatch rows still import but stay unassigned.
+                  {blockedCount} row{blockedCount === 1 ? '' : 's'} will be skipped (missing title).
                 </p>
               )}
             </div>

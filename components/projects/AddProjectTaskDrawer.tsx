@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { X, Plus } from 'lucide-react'
 import type { ProjectOwner } from '@/types'
 
@@ -20,26 +20,18 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     status: 'pending' as 'pending' | 'in_progress' | 'completed',
     progress: 0,
-    assignee_id: '',
     due_date: '',
+    dependency_task: '',
+    dependency_details: '',
+    dependency_status: '',
+    dependency_owner: '',
+    final_comments: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const selectedOwner = useMemo(
-    () => owners.find(o => o.id === form.owner_id) ?? null,
-    [owners, form.owner_id]
-  )
-
-  const assigneePool = useMemo(() => {
-    if (!selectedOwner) return []
-    const pool: { id: string; full_name: string }[] = []
-    if (selectedOwner.user) pool.push({ id: selectedOwner.user.id, full_name: `${selectedOwner.user.full_name} (Owner)` })
-    selectedOwner.members?.forEach(m => {
-      if (m.user) pool.push({ id: m.user.id, full_name: m.user.full_name })
-    })
-    return pool
-  }, [selectedOwner])
+  const selectedOwner = owners.find(o => o.id === form.owner_id) ?? null
+  const projectOwnerName = selectedOwner?.user?.full_name ?? ''
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -60,8 +52,12 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
         priority: form.priority,
         status: form.status,
         progress: Number(form.progress) || 0,
-        assignee_id: form.assignee_id || null,
         due_date: form.due_date || null,
+        dependency_task: form.dependency_task.trim() || null,
+        dependency_details: form.dependency_details.trim() || null,
+        dependency_status: form.dependency_status.trim() || null,
+        dependency_owner: form.dependency_owner.trim() || null,
+        final_comments: form.final_comments.trim() || null,
       }),
     })
 
@@ -86,20 +82,25 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Owner / Department *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category / Department *</label>
             <select
               required
               value={form.owner_id}
-              onChange={e => setForm(p => ({ ...p, owner_id: e.target.value, assignee_id: '' }))}
+              onChange={e => setForm(p => ({ ...p, owner_id: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Select owner…</option>
+              <option value="">Select category…</option>
               {owners.map(o => (
                 <option key={o.id} value={o.id}>
                   {o.department} — {o.user?.full_name ?? 'Unknown'}
                 </option>
               ))}
             </select>
+            {projectOwnerName && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Project Owner: <span className="font-medium text-gray-700 dark:text-gray-200">{projectOwnerName}</span> (auto-set)
+              </p>
+            )}
           </div>
 
           <div>
@@ -125,37 +126,18 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignee</label>
-              <select
-                value={form.assignee_id}
-                onChange={e => setForm(p => ({ ...p, assignee_id: e.target.value }))}
-                disabled={!selectedOwner}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="">Unassigned</option>
-                {assigneePool.map(m => (
-                  <option key={m.id} value={m.id}>{m.full_name}</option>
-                ))}
-              </select>
-              {selectedOwner && assigneePool.length === 1 && (
-                <p className="text-xs text-gray-500 mt-1">No supporting members yet — only the owner is selectable.</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
-              <select
-                value={form.priority}
-                onChange={e => setForm(p => ({ ...p, priority: e.target.value as typeof p.priority }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+            <select
+              value={form.priority}
+              onChange={e => setForm(p => ({ ...p, priority: e.target.value as typeof p.priority }))}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -191,6 +173,65 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
               value={form.due_date}
               onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Dependency (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Task</label>
+                <input
+                  type="text"
+                  value={form.dependency_task}
+                  onChange={e => setForm(p => ({ ...p, dependency_task: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="What is this blocked on?"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Owner</label>
+                <input
+                  type="text"
+                  value={form.dependency_owner}
+                  onChange={e => setForm(p => ({ ...p, dependency_owner: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Person or team"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Status</label>
+                <input
+                  type="text"
+                  value={form.dependency_status}
+                  onChange={e => setForm(p => ({ ...p, dependency_status: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Pending / In Review / Done…"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Details</label>
+                <input
+                  type="text"
+                  value={form.dependency_details}
+                  onChange={e => setForm(p => ({ ...p, dependency_details: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Why it's blocking"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Final Comments</label>
+            <textarea
+              value={form.final_comments}
+              onChange={e => setForm(p => ({ ...p, final_comments: e.target.value }))}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Owner's commentary covering the task, dependencies, status, next steps…"
             />
           </div>
 
