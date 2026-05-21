@@ -55,7 +55,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
 
   const today = new Date().toISOString().slice(0, 10)
-  const membersById = useMemo(() => new Map(allMembers.map(m => [m.id, m])), [allMembers])
+  const ownersById = useMemo(() => new Map(owners.map(o => [o.id, o])), [owners])
 
   const stats = useMemo(() => {
     let total = 0, completed = 0, in_progress = 0, pending = 0, overdue = 0
@@ -308,13 +308,15 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                 <th className="px-4 py-2 font-medium">Priority</th>
                 <th className="px-4 py-2 font-medium w-44">Progress</th>
                 <th className="px-4 py-2 font-medium">Due Date</th>
-                <th className="px-4 py-2 font-medium">Assignee</th>
+                <th className="px-4 py-2 font-medium">Project Owner</th>
+                <th className="px-4 py-2 font-medium">Dependency</th>
+                <th className="px-4 py-2 font-medium">Final Comments</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -326,7 +328,8 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                 pageRows.map(t => {
                   const overdue = isOverdue(t, today)
                   const displayStatus = overdue ? 'overdue' : t.status
-                  const assignee = t.assignee_id ? membersById.get(t.assignee_id) : null
+                  const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
+                  const projectOwner = taskOwner?.user ?? null
                   return (
                     <tr key={t.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-3">
@@ -356,19 +359,47 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                         {formatDate(t.due_date)}
                       </td>
                       <td className="px-4 py-3">
-                        {assignee ? (
+                        {projectOwner ? (
                           <div className="flex items-center gap-2">
-                            {assignee.avatar_url ? (
-                              <img src={assignee.avatar_url} alt={assignee.full_name} className="w-6 h-6 rounded-full object-cover" />
+                            {projectOwner.avatar_url ? (
+                              <img src={projectOwner.avatar_url} alt={projectOwner.full_name} className="w-6 h-6 rounded-full object-cover" />
                             ) : (
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
-                                {initials(assignee.full_name)}
+                                {initials(projectOwner.full_name)}
                               </div>
                             )}
-                            <span className="text-xs text-gray-700 dark:text-gray-300">{assignee.full_name}</span>
+                            <span className="text-xs text-gray-700 dark:text-gray-300">{projectOwner.full_name}</span>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">Unassigned</span>
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {t.dependency_task ? (
+                          <div className="max-w-xs">
+                            <p className="font-medium text-gray-900 dark:text-white truncate" title={t.dependency_details ?? undefined}>
+                              {t.dependency_task}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                              {t.dependency_owner && <span>{t.dependency_owner}</span>}
+                              {t.dependency_status && (
+                                <span className="inline-block px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                                  {t.dependency_status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {t.final_comments ? (
+                          <p className="max-w-xs line-clamp-2 text-gray-700 dark:text-gray-300" title={t.final_comments}>
+                            {t.final_comments}
+                          </p>
+                        ) : (
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
                     </tr>
