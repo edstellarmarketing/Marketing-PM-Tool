@@ -301,16 +301,20 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
 
         {/* Task table */}
         <div className="mt-3 overflow-x-auto">
-          <table className="text-sm min-w-[1500px] w-full">
+          <table className="text-sm min-w-[2200px] w-full">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
                 <th className="px-4 py-2 font-medium w-64">Task</th>
-                <th className="px-4 py-2 font-medium w-28">Status</th>
+                <th className="px-4 py-2 font-medium w-28 whitespace-nowrap">Status</th>
                 <th className="px-4 py-2 font-medium w-24">Priority</th>
                 <th className="px-4 py-2 font-medium w-44">Progress</th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Start Date</th>
                 <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Due Date</th>
                 <th className="px-4 py-2 font-medium w-48 whitespace-nowrap">Project Owner</th>
-                <th className="px-4 py-2 font-medium w-64">Dependency</th>
+                <th className="px-4 py-2 font-medium w-48">Dependency Task</th>
+                <th className="px-4 py-2 font-medium w-64">Dependency Details</th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Dependency Status</th>
+                <th className="px-4 py-2 font-medium w-40 whitespace-nowrap">Dependency Owner</th>
                 <th className="px-4 py-2 font-medium w-72">Final Comments</th>
                 <th className="px-4 py-2 font-medium w-16 text-right">Actions</th>
               </tr>
@@ -318,7 +322,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={13} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -357,7 +361,10 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                           <span className="text-xs text-gray-500 dark:text-gray-400 w-9 text-right">{t.progress}%</span>
                         </div>
                       </td>
-                      <td className={`px-4 py-3 text-xs ${overdue ? 'text-red-600 font-medium' : 'text-gray-600 dark:text-gray-300'}`}>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        {formatDate(t.start_date)}
+                      </td>
+                      <td className={`px-4 py-3 text-xs whitespace-nowrap ${overdue ? 'text-red-600 font-medium' : 'text-gray-600 dark:text-gray-300'}`}>
                         {formatDate(t.due_date)}
                       </td>
                       <td className="px-4 py-3">
@@ -376,28 +383,33 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
+                        {t.dependency_task ? t.dependency_task : <span className="text-gray-400">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-xs">
-                        {t.dependency_task ? (
-                          <div className="max-w-xs">
-                            <p className="font-medium text-gray-900 dark:text-white truncate" title={t.dependency_details ?? undefined}>
-                              {t.dependency_task}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                              {t.dependency_owner && <span>{t.dependency_owner}</span>}
-                              {t.dependency_status && (
-                                <span className="inline-block px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
-                                  {t.dependency_status}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                        {t.dependency_details ? (
+                          <p className="line-clamp-2 text-gray-700 dark:text-gray-300" title={t.dependency_details}>
+                            {t.dependency_details}
+                          </p>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {t.dependency_status ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                            {t.dependency_status}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                        {t.dependency_owner ? t.dependency_owner : <span className="text-gray-400">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-xs">
                         {t.final_comments ? (
-                          <p className="max-w-xs line-clamp-2 text-gray-700 dark:text-gray-300" title={t.final_comments}>
+                          <p className="line-clamp-2 text-gray-700 dark:text-gray-300" title={t.final_comments}>
                             {t.final_comments}
                           </p>
                         ) : (

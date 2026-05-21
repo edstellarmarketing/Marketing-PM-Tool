@@ -284,6 +284,7 @@ export interface ProjectTask {
   status: ProjectTaskStatus
   progress: number
   assignee_id: string | null
+  start_date: string | null
   due_date: string | null
   dependency_task: string | null
   dependency_details: string | null
