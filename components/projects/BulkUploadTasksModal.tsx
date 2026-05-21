@@ -3,11 +3,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { X, Upload, Download, Check, AlertCircle, Copy } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import type { ProjectOwner } from '@/types'
+import type { Profile, ProjectOwner } from '@/types'
 
 interface Props {
   projectId: string
   owner: ProjectOwner
+  allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   onClose: () => void
   onImported: () => void
 }
@@ -20,17 +21,19 @@ interface MappedRow {
   status: 'pending' | 'in_progress' | 'completed'
   priority: 'low' | 'medium' | 'high' | 'critical'
   progress: number
+  start_date: string | null
   due_date: string | null
   dependency_task: string | null
   dependency_details: string | null
   dependency_status: string | null
-  dependency_owner: string | null
+  dependency_owner_id: string | null
+  _depOwnerRaw?: string
   final_comments: string | null
   _error?: string
 }
 
 const FIELD_KEYS = [
-  'title', 'description', 'status', 'priority', 'progress', 'due_date',
+  'title', 'description', 'status', 'priority', 'progress', 'start_date', 'due_date',
   'dependency_task', 'dependency_details', 'dependency_status', 'dependency_owner',
   'final_comments',
 ] as const
@@ -42,6 +45,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   status: 'Status',
   priority: 'Priority',
   progress: 'Progress %',
+  start_date: 'Start Date',
   due_date: 'Due Date',
   dependency_task: 'Dependency Task',
   dependency_details: 'Dependency Details',
@@ -57,6 +61,7 @@ const HEADER_HINTS: Record<FieldKey, string[]> = {
   status: ['status'],
   priority: ['priority'],
   progress: ['progress', 'progress %', 'progress percent', '%'],
+  start_date: ['start date', 'start', 'begin', 'begin date', 'kick off', 'kickoff'],
   due_date: ['due date', 'due', 'end date', 'end', 'deadline'],
   dependency_task: ['dependency task', 'dependency', 'depends on', 'blocked by', 'dependent task', 'dependency name'],
   dependency_details: ['dependency details', 'dependency description', 'dependency notes', 'dependency info'],
@@ -71,7 +76,7 @@ function normaliseHeader(h: string) {
 
 function autoMap(headers: string[]): Record<FieldKey, string | null> {
   const out: Record<FieldKey, string | null> = {
-    title: null, description: null, status: null, priority: null, progress: null, due_date: null,
+    title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
   }
@@ -146,21 +151,21 @@ function parseDate(raw: unknown): string | null {
   return null
 }
 
-const TEMPLATE_CSV = `Title,Description,Status,Priority,Progress,Due Date,Dependency Task,Dependency Details,Dependency Status,Dependency Owner,Final Comments
-Header design,Build the responsive site header with sticky navigation,In Progress,High,40,2026-06-15,Brand guidelines sign-off,Need final logo + colour tokens before final pass,In Review,Marketing,Awaiting brand sign-off; once approved, can wrap in a day.
-Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,2026-06-20,,,,,
-Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,2026-06-22,Hero copy approval,Awaiting final hero copy from content team,Pending,Content,Blocked until content team finalises copy.
-SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,2026-05-30,,,,,Done — all audit items addressed.
-Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,2026-06-10,API error contract,Backend needs to standardise validation error payload,In Progress,Backend,Frontend pieces done; integration paused on backend contract.
-Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,2026-06-25,,,,,
+const TEMPLATE_CSV = `Title,Description,Status,Priority,Progress,Start Date,Due Date,Dependency Task,Dependency Details,Dependency Status,Dependency Owner,Final Comments
+Header design,Build the responsive site header with sticky navigation,In Progress,High,40,2026-06-01,2026-06-15,Brand guidelines sign-off,Need final logo + colour tokens before final pass,In Review,Marketing,Awaiting brand sign-off; once approved, can wrap in a day.
+Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,2026-06-10,2026-06-20,,,,,
+Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,2026-06-12,2026-06-22,Hero copy approval,Awaiting final hero copy from content team,Pending,Content,Blocked until content team finalises copy.
+SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,2026-05-20,2026-05-30,,,,,Done — all audit items addressed.
+Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,2026-05-28,2026-06-10,API error contract,Backend needs to standardise validation error payload,In Progress,Backend,Frontend pieces done; integration paused on backend contract.
+Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,2026-06-15,2026-06-25,,,,,
 `
 
-export default function BulkUploadTasksModal({ projectId, owner, onClose, onImported }: Props) {
+export default function BulkUploadTasksModal({ projectId, owner, allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>({
-    title: null, description: null, status: null, priority: null, progress: null, due_date: null,
+    title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
   })
@@ -183,6 +188,15 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
 
   // Project owner is derived from the owner this upload is scoped to; we don't ask for it in the CSV.
   const projectOwnerName = owner.user?.full_name ?? '—'
+
+  function resolveProfile(raw: unknown): string | null {
+    const s = String(raw ?? '').trim().toLowerCase()
+    if (!s) return null
+    const hit = allMembers.find(m => m.full_name.toLowerCase() === s)
+      ?? allMembers.find(m => m.full_name.toLowerCase().startsWith(s))
+      ?? allMembers.find(m => m.full_name.toLowerCase().includes(s))
+    return hit?.id ?? null
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -211,7 +225,7 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
     if (!mapping.title) return []
     const mappedColumns = new Set(
       [mapping.title, mapping.description, mapping.status, mapping.priority,
-        mapping.progress, mapping.due_date,
+        mapping.progress, mapping.start_date, mapping.due_date,
         mapping.dependency_task, mapping.dependency_details, mapping.dependency_status, mapping.dependency_owner,
         mapping.final_comments]
         .filter((v): v is string => !!v)
@@ -237,23 +251,26 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
       const status = mapping.status ? parseStatus(row[mapping.status]) : 'pending'
       const priority = mapping.priority ? parsePriority(row[mapping.priority]) : 'medium'
       const progress = mapping.progress ? parseProgress(row[mapping.progress]) : (status === 'completed' ? 100 : 0)
+      const start_date = mapping.start_date ? parseDate(row[mapping.start_date]) : null
       const due_date = mapping.due_date ? parseDate(row[mapping.due_date]) : null
       const dependency_task = mapping.dependency_task ? (String(row[mapping.dependency_task] ?? '').trim() || null) : null
       const dependency_details = mapping.dependency_details ? (String(row[mapping.dependency_details] ?? '').trim() || null) : null
       const dependency_status = mapping.dependency_status ? (String(row[mapping.dependency_status] ?? '').trim() || null) : null
-      const dependency_owner = mapping.dependency_owner ? (String(row[mapping.dependency_owner] ?? '').trim() || null) : null
+      const depOwnerRaw = mapping.dependency_owner ? String(row[mapping.dependency_owner] ?? '').trim() : ''
+      const dependency_owner_id = depOwnerRaw ? resolveProfile(depOwnerRaw) : null
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
 
       const err = !title ? 'Title is empty' : undefined
 
       return {
-        title, description, status, priority, progress, due_date,
-        dependency_task, dependency_details, dependency_status, dependency_owner,
+        title, description, status, priority, progress, start_date, due_date,
+        dependency_task, dependency_details, dependency_status, dependency_owner_id,
+        _depOwnerRaw: depOwnerRaw,
         final_comments,
         _error: err,
       }
     })
-  }, [rawRows, mapping])
+  }, [rawRows, mapping, allMembers])
 
   const validRows = useMemo(() => mappedRows.filter(r => !r._error), [mappedRows])
   const importable = useMemo(() => mappedRows.filter(r => r.title), [mappedRows])
@@ -273,11 +290,12 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
           status: r.status,
           priority: r.priority,
           progress: r.progress,
+          start_date: r.start_date,
           due_date: r.due_date,
           dependency_task: r.dependency_task,
           dependency_details: r.dependency_details,
           dependency_status: r.dependency_status,
-          dependency_owner: r.dependency_owner,
+          dependency_owner_id: r.dependency_owner_id,
           final_comments: r.final_comments,
         })),
       }),
@@ -422,14 +440,18 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
               <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-auto max-h-64">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
-                    <tr className="text-left text-gray-500 dark:text-gray-400">
+                    <tr className="text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">
                       <th className="px-2 py-1.5 font-medium">Title</th>
                       <th className="px-2 py-1.5 font-medium">Status</th>
                       <th className="px-2 py-1.5 font-medium">Priority</th>
                       <th className="px-2 py-1.5 font-medium">Progress</th>
+                      <th className="px-2 py-1.5 font-medium">Start</th>
                       <th className="px-2 py-1.5 font-medium">Due</th>
                       <th className="px-2 py-1.5 font-medium">Project Owner</th>
-                      <th className="px-2 py-1.5 font-medium">Dependency</th>
+                      <th className="px-2 py-1.5 font-medium">Dep. Task</th>
+                      <th className="px-2 py-1.5 font-medium">Dep. Details</th>
+                      <th className="px-2 py-1.5 font-medium">Dep. Status</th>
+                      <th className="px-2 py-1.5 font-medium">Dep. Owner</th>
                       <th className="px-2 py-1.5 font-medium">Final Comments</th>
                     </tr>
                   </thead>
@@ -437,16 +459,25 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                     {mappedRows.slice(0, 50).map((r, i) => (
                       <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                         <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.status.replace('_', ' ')}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
                         <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.due_date ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{projectOwnerName}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">
-                          {r.dependency_task ? (
-                            <span title={[r.dependency_details, r.dependency_status, r.dependency_owner].filter(Boolean).join(' • ')}>
-                              {r.dependency_task}
-                              {r.dependency_owner && <span className="text-gray-400"> ({r.dependency_owner})</span>}
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.start_date ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.due_date ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{projectOwnerName}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.dependency_task ?? <span className="text-gray-400">—</span>}</td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.dependency_details ?? undefined}>
+                          {r.dependency_details ?? <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_status ?? <span className="text-gray-400">—</span>}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          {r.dependency_owner_id ? (
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {allMembers.find(m => m.id === r.dependency_owner_id)?.full_name}
+                            </span>
+                          ) : r._depOwnerRaw ? (
+                            <span className="text-amber-700 dark:text-amber-400" title="No matching user — will import with no dependency owner">
+                              {r._depOwnerRaw} (no match)
                             </span>
                           ) : <span className="text-gray-400">—</span>}
                         </td>
@@ -466,6 +497,15 @@ export default function BulkUploadTasksModal({ projectId, owner, onClose, onImpo
                   {blockedCount} row{blockedCount === 1 ? '' : 's'} will be skipped (missing title).
                 </p>
               )}
+              {(() => {
+                const unmatched = mappedRows.filter(r => r._depOwnerRaw && !r.dependency_owner_id).length
+                if (unmatched === 0) return null
+                return (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                    {unmatched} row{unmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user in the PM tool — those tasks will import with no dependency owner. Add the user first or correct the name to set it.
+                  </p>
+                )
+              })()}
             </div>
           )}
         </div>

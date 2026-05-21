@@ -2,18 +2,19 @@
 
 import { useState } from 'react'
 import { X, Plus, Save, Trash2 } from 'lucide-react'
-import type { ProjectOwner, ProjectTask } from '@/types'
+import type { Profile, ProjectOwner, ProjectTask } from '@/types'
 
 interface Props {
   projectId: string
   owners: ProjectOwner[]
   defaultOwnerId: string | null
   task?: ProjectTask | null
+  allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   onClose: () => void
   onCreated: () => void
 }
 
-export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, onClose, onCreated }: Props) {
+export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, allMembers, onClose, onCreated }: Props) {
   const isEdit = !!task
 
   const [form, setForm] = useState({
@@ -23,11 +24,12 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
     priority: (task?.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'critical',
     status: (task?.status ?? 'pending') as 'pending' | 'in_progress' | 'completed',
     progress: task?.progress ?? 0,
+    start_date: task?.start_date ?? '',
     due_date: task?.due_date ?? '',
     dependency_task: task?.dependency_task ?? '',
     dependency_details: task?.dependency_details ?? '',
     dependency_status: task?.dependency_status ?? '',
-    dependency_owner: task?.dependency_owner ?? '',
+    dependency_owner_id: task?.dependency_owner_id ?? '',
     final_comments: task?.final_comments ?? '',
   })
   const [loading, setLoading] = useState(false)
@@ -52,11 +54,12 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
       priority: form.priority,
       status: form.status,
       progress: Number(form.progress) || 0,
+      start_date: form.start_date || null,
       due_date: form.due_date || null,
       dependency_task: form.dependency_task.trim() || null,
       dependency_details: form.dependency_details.trim() || null,
       dependency_status: form.dependency_status.trim() || null,
-      dependency_owner: form.dependency_owner.trim() || null,
+      dependency_owner_id: form.dependency_owner_id || null,
       final_comments: form.final_comments.trim() || null,
     }
 
@@ -192,14 +195,25 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-            <input
-              type="date"
-              value={form.due_date}
-              onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={form.start_date}
+                onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+              <input
+                type="date"
+                value={form.due_date}
+                onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
@@ -217,13 +231,16 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Owner</label>
-                <input
-                  type="text"
-                  value={form.dependency_owner}
-                  onChange={e => setForm(p => ({ ...p, dependency_owner: e.target.value }))}
+                <select
+                  value={form.dependency_owner_id}
+                  onChange={e => setForm(p => ({ ...p, dependency_owner_id: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Person or team"
-                />
+                >
+                  <option value="">— Select user —</option>
+                  {allMembers.map(m => (
+                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3">

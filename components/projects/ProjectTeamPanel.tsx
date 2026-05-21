@@ -293,6 +293,7 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
           <BulkUploadTasksModal
             projectId={projectId}
             owner={o}
+            allMembers={allMembers}
             onClose={() => setBulkOwnerId(null)}
             onImported={() => { setBulkOwnerId(null); onChange() }}
           />
