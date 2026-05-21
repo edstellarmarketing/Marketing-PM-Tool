@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X, Plus, Save, Trash2 } from 'lucide-react'
+import RichTextEditor from '@/components/notes/RichTextEditor'
 import type { Profile, ProjectOwner, ProjectTask } from '@/types'
 
 interface Props {
@@ -269,11 +270,9 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Final Comments</label>
-            <textarea
+            <RichTextEditor
               value={form.final_comments}
-              onChange={e => setForm(p => ({ ...p, final_comments: e.target.value }))}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={html => setForm(p => ({ ...p, final_comments: html }))}
               placeholder="Owner's commentary covering the task, dependencies, status, next steps…"
             />
           </div>

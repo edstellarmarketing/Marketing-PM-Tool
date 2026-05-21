@@ -434,9 +434,10 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers }:
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {t.final_comments ? (
-                          <p className="line-clamp-2 text-gray-700 dark:text-gray-300" title={t.final_comments}>
-                            {t.final_comments}
-                          </p>
+                          <div
+                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
+                            dangerouslySetInnerHTML={{ __html: t.final_comments }}
+                          />
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
