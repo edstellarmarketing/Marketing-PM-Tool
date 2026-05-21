@@ -384,9 +384,9 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         <div className="mt-3 overflow-x-auto">
           <table className="text-sm min-w-[2200px] w-full">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
+              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                 {isAdmin && (
-                  <th className="px-3 py-2 w-10">
+                  <th className="px-3 py-2 w-10 sticky left-0 z-20 bg-white dark:bg-gray-900">
                     <input
                       type="checkbox"
                       checked={allFilteredSelected}
@@ -397,7 +397,12 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                     />
                   </th>
                 )}
-                <th className="px-4 py-2 font-medium w-64">Task</th>
+                <th
+                  className="px-4 py-2 font-medium w-64 sticky z-20 bg-white dark:bg-gray-900 shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]"
+                  style={{ left: isAdmin ? 40 : 0 }}
+                >
+                  Task
+                </th>
                 <th className="px-4 py-2 font-medium w-28 whitespace-nowrap">Status</th>
                 <th className="px-4 py-2 font-medium w-24">Priority</th>
                 <th className="px-4 py-2 font-medium w-44">Progress</th>
@@ -405,9 +410,9 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                 <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Due Date</th>
                 <th className="px-4 py-2 font-medium w-48 whitespace-nowrap">Project Owner</th>
                 <th className="px-4 py-2 font-medium w-48">Dependency Task</th>
-                <th className="px-4 py-2 font-medium w-64">Dependency Details</th>
-                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Dependency Status</th>
                 <th className="px-4 py-2 font-medium w-40 whitespace-nowrap">Dependency Owner</th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Dependency Status</th>
+                <th className="px-4 py-2 font-medium w-64">Dependency Details</th>
                 <th className="px-4 py-2 font-medium w-72">Final Comments</th>
                 <th className="px-4 py-2 font-medium w-16 text-right">Actions</th>
               </tr>
@@ -430,9 +435,9 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                   const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
                   const projectOwner = taskOwner?.user ?? null
                   return (
-                    <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}>
+                    <tr key={t.id} className={`group border-b border-gray-100 dark:border-gray-800 last:border-0 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
                       {isAdmin && (
-                        <td className="px-3 py-3">
+                        <td className={`px-3 py-3 sticky left-0 z-10 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50`}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(t.id)}
@@ -441,7 +446,10 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                           />
                         </td>
                       )}
-                      <td className="px-4 py-3">
+                      <td
+                        className={`px-4 py-3 sticky z-10 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50 shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
+                        style={{ left: isAdmin ? 40 : 0 }}
+                      >
                         <button
                           onClick={() => setEditingTask(t)}
                           className="text-left font-medium text-gray-900 dark:text-white hover:text-blue-600 hover:underline focus:outline-none focus:text-blue-600"
@@ -495,25 +503,6 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                       <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
                         {t.dependency_task ? t.dependency_task : <span className="text-gray-400">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {t.dependency_details ? (
-                          <div
-                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
-                            dangerouslySetInnerHTML={{ __html: t.dependency_details }}
-                          />
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
-                        {t.dependency_status ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
-                            {t.dependency_status}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {(() => {
                           const dep = t.dependency_owner_id ? membersById.get(t.dependency_owner_id) : null
@@ -534,6 +523,25 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                           if (t.dependency_owner) return <span className="text-gray-700 dark:text-gray-300">{t.dependency_owner}</span>
                           return <span className="text-gray-400">—</span>
                         })()}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {t.dependency_status ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                            {t.dependency_status}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {t.dependency_details ? (
+                          <div
+                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
+                            dangerouslySetInnerHTML={{ __html: t.dependency_details }}
+                          />
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {t.final_comments ? (
