@@ -174,6 +174,9 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const [result, setResult] = useState<{ inserted: number } | null>(null)
   const [copied, setCopied] = useState(false)
   const [showTemplate, setShowTemplate] = useState(false)
+  // Per-row overrides for unmatched dependency owners. Keyed by row index in
+  // rawRows. '' means "leave unassigned".
+  const [depOwnerOverrides, setDepOwnerOverrides] = useState<Record<number, string>>({})
 
   async function copyTemplate() {
     try {
@@ -216,6 +219,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       setHeaders(hdrs)
       setRawRows(json)
       setMapping(autoMap(hdrs))
+      setDepOwnerOverrides({})
     } catch (err) {
       setError('Could not parse file. Use .csv, .xlsx, or .xls')
     }
@@ -230,7 +234,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         mapping.final_comments]
         .filter((v): v is string => !!v)
     )
-    return rawRows.map(row => {
+    return rawRows.map((row, rowIndex) => {
       const title = String(row[mapping.title!] ?? '').trim()
       // Pull additional context columns into the description if present
       const descParts: string[] = []
@@ -257,7 +261,11 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       const dependency_details = mapping.dependency_details ? (String(row[mapping.dependency_details] ?? '').trim() || null) : null
       const dependency_status = mapping.dependency_status ? (String(row[mapping.dependency_status] ?? '').trim() || null) : null
       const depOwnerRaw = mapping.dependency_owner ? String(row[mapping.dependency_owner] ?? '').trim() : ''
-      const dependency_owner_id = depOwnerRaw ? resolveProfile(depOwnerRaw) : null
+      const autoResolvedDepOwnerId = depOwnerRaw ? resolveProfile(depOwnerRaw) : null
+      // Per-row override wins. Empty string means user explicitly chose "leave unassigned".
+      const dependency_owner_id = rowIndex in depOwnerOverrides
+        ? (depOwnerOverrides[rowIndex] || null)
+        : autoResolvedDepOwnerId
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
 
       const err = !title ? 'Title is empty' : undefined
@@ -270,7 +278,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         _error: err,
       }
     })
-  }, [rawRows, mapping, allMembers])
+  }, [rawRows, mapping, allMembers, depOwnerOverrides])
 
   const validRows = useMemo(() => mappedRows.filter(r => !r._error), [mappedRows])
   const importable = useMemo(() => mappedRows.filter(r => r.title), [mappedRows])
@@ -473,36 +481,47 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                     </tr>
                   </thead>
                   <tbody>
-                    {mappedRows.slice(0, 50).map((r, i) => (
-                      <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
-                        <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.start_date ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.due_date ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{projectOwnerName}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.dependency_task ?? <span className="text-gray-400">—</span>}</td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.dependency_details ?? undefined}>
-                          {r.dependency_details ?? <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_status ?? <span className="text-gray-400">—</span>}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">
-                          {r.dependency_owner_id ? (
-                            <span className="text-gray-700 dark:text-gray-300">
-                              {allMembers.find(m => m.id === r.dependency_owner_id)?.full_name}
-                            </span>
-                          ) : r._depOwnerRaw ? (
-                            <span className="text-amber-700 dark:text-amber-400" title="No matching user — will import with no dependency owner">
-                              {r._depOwnerRaw} (no match)
-                            </span>
-                          ) : <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.final_comments ?? undefined}>
-                          {r.final_comments ?? <span className="text-gray-400">—</span>}
-                        </td>
-                      </tr>
-                    ))}
+                    {mappedRows.slice(0, 50).map((r, i) => {
+                      const needsPicker = !!r._depOwnerRaw
+                      return (
+                        <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
+                          <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.start_date ?? '—'}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.due_date ?? '—'}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{projectOwnerName}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.dependency_task ?? <span className="text-gray-400">—</span>}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.dependency_details ?? undefined}>
+                            {r.dependency_details ?? <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_status ?? <span className="text-gray-400">—</span>}</td>
+                          <td className="px-2 py-1.5 whitespace-nowrap">
+                            {needsPicker ? (
+                              <select
+                                value={r.dependency_owner_id ?? ''}
+                                onChange={e => setDepOwnerOverrides(prev => ({ ...prev, [i]: e.target.value }))}
+                                className={`text-xs px-1.5 py-1 border rounded dark:bg-gray-800 dark:text-white ${
+                                  r.dependency_owner_id
+                                    ? 'border-gray-200 dark:border-gray-700'
+                                    : 'border-amber-400 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300'
+                                }`}
+                                title={`From file: "${r._depOwnerRaw}"`}
+                              >
+                                <option value="">— Leave unassigned —</option>
+                                {allMembers.map(m => (
+                                  <option key={m.id} value={m.id}>{m.full_name}</option>
+                                ))}
+                              </select>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.final_comments ?? undefined}>
+                            {r.final_comments ?? <span className="text-gray-400">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -519,7 +538,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                 if (unmatched === 0) return null
                 return (
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                    {unmatched} row{unmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user in the PM tool — those tasks will import with no dependency owner. Add the user first or correct the name to set it.
+                    {unmatched} row{unmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user in the PM tool. Pick the matching user from the dropdown in the Dep. Owner column to set it, or leave unassigned to import without one.
                   </p>
                 )
               })()}
