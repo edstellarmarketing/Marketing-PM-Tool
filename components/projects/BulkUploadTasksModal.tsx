@@ -344,12 +344,20 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
               className="hidden"
             />
             <a
+              href="/api/templates/project-tasks-xlsx"
+              download="bulk-task-template.xlsx"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <Download size={15} />
+              Excel Template
+            </a>
+            <a
               href="/api/templates/project-tasks"
               download="bulk-task-template.csv"
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <Download size={15} />
-              Download Template
+              CSV Template
             </a>
             <button
               type="button"
