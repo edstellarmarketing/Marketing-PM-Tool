@@ -639,8 +639,8 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                         {t.category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.category}</p>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${statusStyle[displayStatus] ?? statusStyle.pending}`}>
-                          {displayStatus === 'completed' && <CheckCircle2 size={11} />}
+                        <span className={`inline-flex items-center gap-1 whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full border ${statusStyle[displayStatus] ?? statusStyle.pending}`}>
+                          {displayStatus === 'completed' && <CheckCircle2 size={10} />}
                           {displayStatus === 'in_progress' ? 'In Progress' :
                             displayStatus === 'overdue' ? 'Overdue' :
                             displayStatus === 'completed' ? 'Completed' : 'Pending'}
