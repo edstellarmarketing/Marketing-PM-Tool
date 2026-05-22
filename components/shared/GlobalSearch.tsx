@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +23,7 @@ const statusColor: Record<string, string> = {
 
 export default function GlobalSearch() {
   const router = useRouter()
+  const pathname = usePathname()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Result[]>([])
   const [open, setOpen] = useState(false)
@@ -70,6 +71,8 @@ export default function GlobalSearch() {
     setQuery('')
     router.push(`/tasks/${id}`)
   }
+
+  if (pathname === '/admin/monthly-tasks') return null
 
   return (
     <div className="relative w-64" ref={ref}>

@@ -6,6 +6,7 @@ import GlobalSearch from '@/components/shared/GlobalSearch'
 import DarkModeToggle from '@/components/shared/DarkModeToggle'
 import KeyboardShortcuts from '@/components/shared/KeyboardShortcuts'
 import AssignTaskButton from '@/components/admin/AssignTaskButton'
+import CreateMonthlyTasksButton from '@/components/admin/CreateMonthlyTasksButton'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -33,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-3">
             <GlobalSearch />
             {role === 'admin' && <AssignTaskButton />}
+            {role === 'admin' && <CreateMonthlyTasksButton />}
           </div>
           <div className="flex items-center gap-1">
             <DarkModeToggle />

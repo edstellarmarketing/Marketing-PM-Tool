@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Plus, X, UserCheck, CheckSquare, Trash2, GripVertical, ChevronDown } from 'lucide-react'
 import ScoringClassification from '@/components/tasks/ScoringClassification'
 import { computeScorePreview } from '@/lib/scoring'
@@ -28,7 +28,10 @@ function computePreview(configs: PointConfig[], taskType: TaskType | '', complex
 }
 
 export default function AssignTaskButton() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
+
+  if (pathname === '/admin/monthly-tasks') return null
 
   return (
     <>
