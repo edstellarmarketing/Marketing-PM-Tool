@@ -1,22 +1,9 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Upload, FileText, X } from 'lucide-react'
-
-const ACCEPTED_FILE_TYPES = '.html,.htm,.doc,.docx,.csv,.xls,.xlsx'
-const ACCEPTED_EXT = new Set(['html', 'htm', 'doc', 'docx', 'csv', 'xls', 'xlsx'])
-
-function hasAcceptedExtension(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase() ?? ''
-  return ACCEPTED_EXT.has(ext)
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+import { ArrowLeft, Upload, Trash2 } from 'lucide-react'
+import MonthlyBulkUploadModal, { type MappedRow } from './MonthlyBulkUploadModal'
 
 interface UserInfo {
   id: string
@@ -29,6 +16,8 @@ interface Props {
   month: number
   user: UserInfo
 }
+
+type Section = 'start' | 'end'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -50,10 +39,42 @@ function Avatar({ user }: { user: UserInfo }) {
   )
 }
 
+function storageKey(userId: string, year: number, month: number, section: Section) {
+  return `monthly-tasks-rows::${userId}::${year}-${String(month).padStart(2, '0')}::${section}`
+}
+
 export default function MonthUserClient({ year, month, user }: Props) {
   const monthHref = `/admin/monthly-tasks/${year}/${String(month).padStart(2, '0')}`
-  const [startFile, setStartFile] = useState<File | null>(null)
-  const [endFile, setEndFile] = useState<File | null>(null)
+  const [startRows, setStartRows] = useState<MappedRow[]>([])
+  const [endRows, setEndRows] = useState<MappedRow[]>([])
+  const [openModal, setOpenModal] = useState<Section | null>(null)
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(storageKey(user.id, year, month, 'start'))
+      const e = localStorage.getItem(storageKey(user.id, year, month, 'end'))
+      if (s) setStartRows(JSON.parse(s))
+      if (e) setEndRows(JSON.parse(e))
+    } catch {}
+    setHydrated(true)
+  }, [user.id, year, month])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try { localStorage.setItem(storageKey(user.id, year, month, 'start'), JSON.stringify(startRows)) } catch {}
+  }, [startRows, hydrated, user.id, year, month])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try { localStorage.setItem(storageKey(user.id, year, month, 'end'), JSON.stringify(endRows)) } catch {}
+  }, [endRows, hydrated, user.id, year, month])
+
+  function handleImported(section: Section, rows: MappedRow[]) {
+    if (section === 'start') setStartRows(prev => [...prev, ...rows])
+    else setEndRows(prev => [...prev, ...rows])
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)]">
       <div className="flex-shrink-0">
@@ -74,34 +95,48 @@ export default function MonthUserClient({ year, month, user }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-        <UploadPanel
+        <TaskPanel
           title="Start of the Month"
           headerColor="blue"
-          file={startFile}
-          onFile={setStartFile}
+          rows={startRows}
+          onUploadClick={() => setOpenModal('start')}
+          onClear={() => setStartRows([])}
+          onRemoveRow={i => setStartRows(prev => prev.filter((_, idx) => idx !== i))}
         />
-        <UploadPanel
+        <TaskPanel
           title="End of the Month"
           headerColor="purple"
-          file={endFile}
-          onFile={setEndFile}
+          rows={endRows}
+          onUploadClick={() => setOpenModal('end')}
+          onClear={() => setEndRows([])}
+          onRemoveRow={i => setEndRows(prev => prev.filter((_, idx) => idx !== i))}
         />
       </div>
+
+      {openModal && (
+        <MonthlyBulkUploadModal
+          user={user}
+          year={year}
+          month={month}
+          section={openModal}
+          onClose={() => setOpenModal(null)}
+          onImported={rows => handleImported(openModal, rows)}
+        />
+      )}
     </div>
   )
 }
 
-function UploadPanel({
-  title, headerColor, file, onFile,
+function TaskPanel({
+  title, headerColor, rows, onUploadClick, onClear, onRemoveRow,
 }: {
   title: string
   headerColor: 'blue' | 'purple'
-  file: File | null
-  onFile: (f: File | null) => void
+  rows: MappedRow[]
+  onUploadClick: () => void
+  onClear: () => void
+  onRemoveRow: (index: number) => void
 }) {
-  const inputId = useId()
-  const [dragOver, setDragOver] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const headerCls = headerColor === 'blue'
     ? 'bg-blue-50/40 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300'
     : 'bg-purple-50/40 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300'
@@ -109,81 +144,83 @@ function UploadPanel({
     ? 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 border-blue-200 dark:border-blue-900'
     : 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 hover:bg-purple-200 dark:hover:bg-purple-900/60 border-purple-200 dark:border-purple-900'
 
-  function acceptFile(f: File | null | undefined) {
-    if (!f) return
-    if (!hasAcceptedExtension(f.name)) {
-      setError(`"${f.name}" isn't an accepted file type. Use HTML, DOC/DOCX, CSV, or XLSX.`)
-      return
-    }
-    setError(null)
-    onFile(f)
-  }
-
-  function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    acceptFile(e.target.files?.[0])
-    e.target.value = ''
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault()
-    setDragOver(false)
-    acceptFile(e.dataTransfer.files?.[0])
-  }
-
   return (
     <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl flex flex-col overflow-hidden">
       <header className={`flex items-center justify-between gap-2 px-5 py-3 border-b border-gray-100 dark:border-gray-800 ${headerCls}`}>
         <h2 className="text-sm font-semibold uppercase tracking-wide">{title}</h2>
-        <label
-          htmlFor={inputId}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-lg cursor-pointer transition-colors ${buttonCls}`}
-        >
-          <Upload size={12} />
-          {file ? 'Replace' : 'Upload'}
-        </label>
-        <input
-          id={inputId}
-          type="file"
-          accept={ACCEPTED_FILE_TYPES}
-          onChange={onSelect}
-          className="sr-only"
-        />
-      </header>
-      <div
-        className={`flex-1 overflow-y-auto p-5 transition-colors ${dragOver ? 'bg-blue-50/60 dark:bg-blue-950/30' : ''}`}
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-      >
-        {file ? (
-          <div className="flex items-start justify-between gap-3 p-3 border border-gray-200 dark:border-gray-800 rounded-lg">
-            <div className="flex items-start gap-2.5 min-w-0">
-              <FileText size={18} className="text-gray-500 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatBytes(file.size)}</p>
-              </div>
-            </div>
+        <div className="flex items-center gap-2">
+          {rows.length > 0 && (
             <button
               type="button"
-              onClick={() => onFile(null)}
-              className="p-1 text-gray-400 hover:text-red-600"
-              title="Remove file"
+              onClick={onClear}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              <X size={14} />
+              <Trash2 size={12} />
+              Clear
             </button>
-          </div>
-        ) : (
-          <label
-            htmlFor={inputId}
-            className="w-full h-full min-h-[160px] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-700 dark:hover:text-blue-400 transition-colors cursor-pointer"
+          )}
+          <button
+            type="button"
+            onClick={onUploadClick}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-lg cursor-pointer transition-colors ${buttonCls}`}
+          >
+            <Upload size={12} />
+            Bulk Upload
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {rows.length === 0 ? (
+          <button
+            type="button"
+            onClick={onUploadClick}
+            className="w-full h-full min-h-[160px] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-700 dark:hover:text-blue-400 transition-colors"
           >
             <Upload size={20} />
-            <span className="text-xs">Click or drag a file here</span>
-          </label>
-        )}
-        {error && (
-          <p className="mt-3 text-xs text-red-600 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">{error}</p>
+            <span className="text-xs">Bulk upload from CSV or Excel</span>
+          </button>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-800/40">
+                <tr className="text-left text-gray-500 dark:text-gray-400">
+                  <th className="px-2 py-1.5 font-medium">Title</th>
+                  <th className="px-2 py-1.5 font-medium">Status</th>
+                  <th className="px-2 py-1.5 font-medium">Priority</th>
+                  <th className="px-2 py-1.5 font-medium">Progress</th>
+                  <th className="px-2 py-1.5 font-medium whitespace-nowrap">Due</th>
+                  <th className="px-2 py-1.5 font-medium w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                    <td className="px-2 py-1.5 text-gray-900 dark:text-white">
+                      <p className="font-medium">{r.title}</p>
+                      {r.description && (
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{r.description}</p>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
+                    <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
+                    <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>
+                    <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.due_date ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onRemoveRow(i)}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                        title="Remove row"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>
