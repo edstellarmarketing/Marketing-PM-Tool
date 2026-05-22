@@ -1,9 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Plus, Save, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { X, Plus, Save, Trash2, ChevronDown } from 'lucide-react'
 import RichTextEditor from '@/components/notes/RichTextEditor'
 import type { Profile, ProjectOwner, ProjectTask } from '@/types'
+
+function initialDependencyOwnerIds(task?: ProjectTask | null): string[] {
+  if (!task) return []
+  if (task.dependency_owner_ids && task.dependency_owner_ids.length > 0) return task.dependency_owner_ids
+  if (task.dependency_owner_id) return [task.dependency_owner_id]
+  return []
+}
 
 interface Props {
   projectId: string
@@ -31,12 +38,20 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
     dependency_task: task?.dependency_task ?? '',
     dependency_details: task?.dependency_details ?? '',
     dependency_status: task?.dependency_status ?? '',
-    dependency_owner_id: task?.dependency_owner_id ?? '',
     final_comments: task?.final_comments ?? '',
   })
+  const [dependencyOwnerIds, setDependencyOwnerIds] = useState<string[]>(initialDependencyOwnerIds(task))
+  const [depOwnerOpen, setDepOwnerOpen] = useState(false)
+  const depOwnerRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const memberById = useMemo(() => new Map(allMembers.map(m => [m.id, m])), [allMembers])
+
+  function toggleDepOwner(id: string) {
+    setDependencyOwnerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   const selectedOwner = owners.find(o => o.id === form.owner_id) ?? null
   const projectOwnerName = selectedOwner?.user?.full_name ?? ''
@@ -61,7 +76,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
       dependency_task: form.dependency_task.trim() || null,
       dependency_details: form.dependency_details.trim() || null,
       dependency_status: form.dependency_status.trim() || null,
-      dependency_owner_id: form.dependency_owner_id || null,
+      dependency_owner_ids: dependencyOwnerIds.length > 0 ? dependencyOwnerIds : null,
       final_comments: form.final_comments.trim() || null,
     }
 
@@ -231,18 +246,66 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
                   placeholder="What is this blocked on?"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Owner</label>
-                <select
-                  value={form.dependency_owner_id}
-                  onChange={e => setForm(p => ({ ...p, dependency_owner_id: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <div ref={depOwnerRef} className="relative">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependency Owners</label>
+                <button
+                  type="button"
+                  onClick={() => setDepOwnerOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-2 min-h-[38px] px-3 py-1.5 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">— Select user —</option>
-                  {allMembers.map(m => (
-                    <option key={m.id} value={m.id}>{m.full_name}</option>
-                  ))}
-                </select>
+                  {dependencyOwnerIds.length === 0 ? (
+                    <span className="text-gray-400">— Select users —</span>
+                  ) : (
+                    <span className="flex flex-wrap gap-1">
+                      {dependencyOwnerIds.map(id => {
+                        const m = memberById.get(id)
+                        const label = m?.full_name ?? 'Unknown'
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded">
+                            {label}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={e => { e.stopPropagation(); toggleDepOwner(id) }}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); toggleDepOwner(id) } }}
+                              className="text-blue-500 hover:text-blue-700 cursor-pointer"
+                              aria-label={`Remove ${label}`}
+                            >
+                              <X size={11} />
+                            </span>
+                          </span>
+                        )
+                      })}
+                    </span>
+                  )}
+                  <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
+                </button>
+                {depOwnerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setDepOwnerOpen(false)} />
+                    <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg p-1">
+                      {allMembers.length === 0 ? (
+                        <p className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400">No members.</p>
+                      ) : allMembers.map(m => {
+                        const checked = dependencyOwnerIds.includes(m.id)
+                        return (
+                          <label
+                            key={m.id}
+                            className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleDepOwner(m.id)}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="truncate">{m.full_name}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
             <div className="mt-3">

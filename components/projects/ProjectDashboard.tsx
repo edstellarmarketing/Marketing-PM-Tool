@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ArrowUpDown, FilterX,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
@@ -19,7 +19,7 @@ interface Props {
   isAdmin: boolean
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -53,6 +53,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const [search, setSearch] = useState('')
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -61,6 +62,48 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const [statusFilter, setStatusFilter] = useState<'open' | 'completed' | 'all'>('open')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
+
+  const [sortBy, setSortBy] = useState<'start_date' | 'due_date' | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [statusValues, setStatusValues] = useState<Set<string>>(new Set())
+  const [priorityValues, setPriorityValues] = useState<Set<string>>(new Set())
+  const [openHeaderFilter, setOpenHeaderFilter] = useState<'status' | 'priority' | null>(null)
+
+  function toggleSort(col: 'start_date' | 'due_date') {
+    if (sortBy !== col) { setSortBy(col); setSortDir('asc'); return }
+    if (sortDir === 'asc') { setSortDir('desc'); return }
+    setSortBy(null)
+  }
+
+  function toggleSetValue(setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) {
+    setter(prev => {
+      const next = new Set(prev)
+      if (next.has(value)) next.delete(value); else next.add(value)
+      return next
+    })
+  }
+
+  const filtersActive = (
+    search.trim() !== '' ||
+    activeOwnerId !== 'all' ||
+    statusFilter !== 'open' ||
+    statusValues.size > 0 ||
+    priorityValues.size > 0 ||
+    sortBy !== null
+  )
+
+  function resetAllFilters() {
+    setSearch('')
+    setActiveOwnerId('all')
+    setStatusFilter('open')
+    setStatusValues(new Set())
+    setPriorityValues(new Set())
+    setSortBy(null)
+    setSortDir('asc')
+    setOpenHeaderFilter(null)
+    setFiltersOpen(false)
+    setPage(1)
+  }
 
   const today = new Date().toISOString().slice(0, 10)
   const ownersById = useMemo(() => new Map(owners.map(o => [o.id, o])), [owners])
@@ -102,13 +145,31 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
       if (q && !t.title.toLowerCase().includes(q)) return false
       if (statusFilter === 'open' && t.status === 'completed') return false
       if (statusFilter === 'completed' && t.status !== 'completed') return false
+      if (statusValues.size > 0) {
+        const effective = isOverdue(t, today) ? 'overdue' : t.status
+        if (!statusValues.has(effective)) return false
+      }
+      if (priorityValues.size > 0 && !priorityValues.has(t.priority)) return false
       return true
     })
-  }, [tasks, activeOwnerId, search, statusFilter])
+  }, [tasks, activeOwnerId, search, statusFilter, statusValues, priorityValues, today])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const sortedRows = useMemo(() => {
+    if (!sortBy) return filtered
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      const av = a[sortBy]
+      const bv = b[sortBy]
+      if (!av && !bv) return 0
+      if (!av) return 1
+      if (!bv) return -1
+      return av < bv ? -dir : av > bv ? dir : 0
+    })
+  }, [filtered, sortBy, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const pageRows = sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const canAddTask = owners.length > 0
 
@@ -343,6 +404,17 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                 className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-800 transition-colors"
+                title="Clear search, sort and all column filters"
+              >
+                <FilterX size={14} />
+                Reset filters
+              </button>
+            )}
             <div className="relative">
               <button
                 onClick={() => setFiltersOpen(o => !o)}
@@ -419,7 +491,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
 
         {/* Task table */}
         <div className="mt-3 overflow-x-auto">
-          <table className="text-sm min-w-[2200px] w-full">
+          <table className="text-sm min-w-[2500px] w-full">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                 {isAdmin && (
@@ -440,16 +512,51 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                 >
                   Task
                 </th>
-                <th className="px-4 py-2 font-medium w-28 whitespace-nowrap">Status</th>
-                <th className="px-4 py-2 font-medium w-24">Priority</th>
+                <th className="px-4 py-2 font-medium w-28 whitespace-nowrap">
+                  <ColumnFilter
+                    label="Status"
+                    options={[
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'in_progress', label: 'In Progress' },
+                      { value: 'completed', label: 'Completed' },
+                      { value: 'overdue', label: 'Overdue' },
+                    ]}
+                    values={statusValues}
+                    open={openHeaderFilter === 'status'}
+                    onOpenChange={open => setOpenHeaderFilter(open ? 'status' : null)}
+                    onToggle={v => toggleSetValue(setStatusValues, v)}
+                    onClear={() => setStatusValues(new Set())}
+                  />
+                </th>
+                <th className="px-4 py-2 font-medium w-24">
+                  <ColumnFilter
+                    label="Priority"
+                    options={[
+                      { value: 'critical', label: 'Critical' },
+                      { value: 'high', label: 'High' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'low', label: 'Low' },
+                    ]}
+                    values={priorityValues}
+                    open={openHeaderFilter === 'priority'}
+                    onOpenChange={open => setOpenHeaderFilter(open ? 'priority' : null)}
+                    onToggle={v => toggleSetValue(setPriorityValues, v)}
+                    onClear={() => setPriorityValues(new Set())}
+                  />
+                </th>
                 <th className="px-4 py-2 font-medium w-44">Progress</th>
-                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Start Date</th>
-                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Due Date</th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">
+                  <SortHeader label="Start Date" active={sortBy === 'start_date'} dir={sortDir} onClick={() => toggleSort('start_date')} />
+                </th>
+                <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">
+                  <SortHeader label="Due Date" active={sortBy === 'due_date'} dir={sortDir} onClick={() => toggleSort('due_date')} />
+                </th>
                 <th className="px-4 py-2 font-medium w-48 whitespace-nowrap">Project Owner</th>
                 <th className="px-4 py-2 font-medium w-48">Dependency Task</th>
                 <th className="px-4 py-2 font-medium w-40 whitespace-nowrap">Dependency Owner</th>
                 <th className="px-4 py-2 font-medium w-32 whitespace-nowrap">Dependency Status</th>
                 <th className="px-4 py-2 font-medium w-64">Dependency Details</th>
+                <th className="px-4 py-2 font-medium w-72">Description</th>
                 <th className="px-4 py-2 font-medium w-72">Final Comments</th>
                 <th className="px-4 py-2 font-medium w-16 text-right">Actions</th>
               </tr>
@@ -457,7 +564,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 14 : 13} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={isAdmin ? 15 : 14} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -542,18 +649,25 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {(() => {
-                          const dep = t.dependency_owner_id ? membersById.get(t.dependency_owner_id) : null
-                          if (dep) {
+                          const ids: string[] = (t.dependency_owner_ids && t.dependency_owner_ids.length > 0)
+                            ? t.dependency_owner_ids
+                            : (t.dependency_owner_id ? [t.dependency_owner_id] : [])
+                          const deps = ids.map(id => membersById.get(id)).filter(Boolean) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
+                          if (deps.length > 0) {
                             return (
-                              <div className="flex items-center gap-2">
-                                {dep.avatar_url ? (
-                                  <img src={dep.avatar_url} alt={dep.full_name} className="w-5 h-5 rounded-full object-cover" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[9px] font-bold flex items-center justify-center">
-                                    {initials(dep.full_name)}
-                                  </div>
-                                )}
-                                <span className="text-gray-700 dark:text-gray-300">{dep.full_name}</span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {deps.map(dep => (
+                                  <span key={dep.id} className="inline-flex items-center gap-1.5 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full">
+                                    {dep.avatar_url ? (
+                                      <img src={dep.avatar_url} alt={dep.full_name} className="w-4 h-4 rounded-full object-cover" />
+                                    ) : (
+                                      <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[8px] font-bold flex items-center justify-center">
+                                        {initials(dep.full_name)}
+                                      </div>
+                                    )}
+                                    <span className="text-gray-700 dark:text-gray-300">{dep.full_name}</span>
+                                  </span>
+                                ))}
                               </div>
                             )
                           }
@@ -576,6 +690,13 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                             className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
                             dangerouslySetInnerHTML={{ __html: t.dependency_details }}
                           />
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {t.description ? (
+                          <p className="line-clamp-3 text-gray-700 dark:text-gray-300 whitespace-pre-line">{t.description}</p>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
@@ -610,9 +731,21 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         {/* Pagination */}
         {filtered.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
-            <p>
-              Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
-            </p>
+            <div className="flex items-center gap-3">
+              <p>
+                Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length}
+              </p>
+              <label className="flex items-center gap-1.5">
+                <span>Rows per page</span>
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="px-1.5 py-0.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -666,5 +799,97 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         />
       )}
     </div>
+  )
+}
+
+function SortHeader({
+  label, active, dir, onClick,
+}: { label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-blue-600 transition-colors ${active ? 'text-blue-600' : ''}`}
+      title={active ? `Sorted ${dir === 'asc' ? 'ascending' : 'descending'} — click to toggle` : 'Sort'}
+    >
+      <span>{label}</span>
+      {active ? (
+        dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+      ) : (
+        <ArrowUpDown size={12} className="opacity-50" />
+      )}
+    </button>
+  )
+}
+
+interface ColumnFilterOption { value: string; label: string }
+function ColumnFilter({
+  label, options, values, open, onOpenChange, onToggle, onClear,
+}: {
+  label: string
+  options: ColumnFilterOption[]
+  values: Set<string>
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onToggle: (value: string) => void
+  onClear: () => void
+}) {
+  const active = values.size > 0
+  return (
+    <span className="relative inline-flex items-center gap-1">
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className={`p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${active ? 'text-blue-600' : 'opacity-60 hover:opacity-100'}`}
+        title="Filter"
+      >
+        <Filter size={12} />
+      </button>
+      {active && (
+        <span className="ml-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-full px-1.5">
+          {values.size}
+        </span>
+      )}
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => onOpenChange(false)} />
+          <div className="absolute top-full left-0 mt-1 z-40 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg p-1.5 normal-case tracking-normal">
+            <div className="max-h-64 overflow-y-auto">
+              {options.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400">No options.</p>
+              ) : options.map(opt => {
+                const checked = values.has(opt.value)
+                return (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm font-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => onToggle(opt.value)}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="truncate">{opt.label}</span>
+                  </label>
+                )
+              })}
+            </div>
+            {active && (
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-1 mt-1">
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="w-full text-left text-xs px-2 py-1 text-blue-600 hover:underline"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </span>
   )
 }

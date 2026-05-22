@@ -16,6 +16,7 @@ const createSchema = z.object({
   dependency_details: z.string().max(2000).nullable().optional(),
   dependency_status: z.string().max(60).nullable().optional(),
   dependency_owner_id: z.string().uuid().nullable().optional(),
+  dependency_owner_ids: z.array(z.string().uuid()).max(50).nullable().optional(),
   final_comments: z.string().max(4000).nullable().optional(),
 })
 
@@ -57,7 +58,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       dependency_task: parsed.data.dependency_task ?? null,
       dependency_details: parsed.data.dependency_details ?? null,
       dependency_status: parsed.data.dependency_status ?? null,
-      dependency_owner_id: parsed.data.dependency_owner_id ?? null,
+      dependency_owner_id: parsed.data.dependency_owner_ids?.[0] ?? parsed.data.dependency_owner_id ?? null,
+      dependency_owner_ids: parsed.data.dependency_owner_ids?.length ? parsed.data.dependency_owner_ids : null,
       final_comments: parsed.data.final_comments ?? null,
       created_by: user.id,
     })

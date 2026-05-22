@@ -26,8 +26,9 @@ interface MappedRow {
   dependency_task: string | null
   dependency_details: string | null
   dependency_status: string | null
-  dependency_owner_id: string | null
-  _depOwnerRaw?: string
+  dependency_owner_ids: string[]
+  _depOwnerNames?: string[]
+  _depOwnerUnmatched?: string[]
   final_comments: string | null
   _error?: string
 }
@@ -175,7 +176,8 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const [copied, setCopied] = useState(false)
   const [showTemplate, setShowTemplate] = useState(false)
   // Per-row overrides for unmatched dependency owners. Keyed by row index in
-  // rawRows. '' means "leave unassigned".
+  // rawRows, value is the chosen user id for the first unmatched name. ''
+  // means "leave unassigned".
   const [depOwnerOverrides, setDepOwnerOverrides] = useState<Record<number, string>>({})
 
   async function copyTemplate() {
@@ -261,19 +263,31 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       const dependency_details = mapping.dependency_details ? (String(row[mapping.dependency_details] ?? '').trim() || null) : null
       const dependency_status = mapping.dependency_status ? (String(row[mapping.dependency_status] ?? '').trim() || null) : null
       const depOwnerRaw = mapping.dependency_owner ? String(row[mapping.dependency_owner] ?? '').trim() : ''
-      const autoResolvedDepOwnerId = depOwnerRaw ? resolveProfile(depOwnerRaw) : null
-      // Per-row override wins. Empty string means user explicitly chose "leave unassigned".
-      const dependency_owner_id = rowIndex in depOwnerOverrides
-        ? (depOwnerOverrides[rowIndex] || null)
-        : autoResolvedDepOwnerId
+      const rawNames = depOwnerRaw
+        ? depOwnerRaw.split(/\s*[,;|]\s*|\s*\/\s*|\s+and\s+/i).map(s => s.trim()).filter(Boolean)
+        : []
+      const resolvedIds: string[] = []
+      const unmatched: string[] = []
+      rawNames.forEach(name => {
+        const id = resolveProfile(name)
+        if (id && !resolvedIds.includes(id)) resolvedIds.push(id)
+        else if (!id) unmatched.push(name)
+      })
+      // Per-row override picks a user for any unmatched names. '' = leave unassigned.
+      if (rowIndex in depOwnerOverrides) {
+        const override = depOwnerOverrides[rowIndex]
+        if (override && !resolvedIds.includes(override)) resolvedIds.push(override)
+      }
+      const dependency_owner_ids = resolvedIds
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
 
       const err = !title ? 'Title is empty' : undefined
 
       return {
         title, description, status, priority, progress, start_date, due_date,
-        dependency_task, dependency_details, dependency_status, dependency_owner_id,
-        _depOwnerRaw: depOwnerRaw,
+        dependency_task, dependency_details, dependency_status, dependency_owner_ids,
+        _depOwnerNames: rawNames,
+        _depOwnerUnmatched: unmatched,
         final_comments,
         _error: err,
       }
@@ -303,7 +317,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
           dependency_task: r.dependency_task,
           dependency_details: r.dependency_details,
           dependency_status: r.dependency_status,
-          dependency_owner_id: r.dependency_owner_id,
+          dependency_owner_ids: r.dependency_owner_ids.length > 0 ? r.dependency_owner_ids : null,
           final_comments: r.final_comments,
         })),
       }),
@@ -482,7 +496,9 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                   </thead>
                   <tbody>
                     {mappedRows.slice(0, 50).map((r, i) => {
-                      const needsPicker = !!r._depOwnerRaw
+                      const names = r._depOwnerNames ?? []
+                      const unmatched = r._depOwnerUnmatched ?? []
+                      const hasUnmatched = unmatched.length > 0
                       return (
                         <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                           <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
@@ -497,24 +513,34 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                             {r.dependency_details ?? <span className="text-gray-400">—</span>}
                           </td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.dependency_status ?? <span className="text-gray-400">—</span>}</td>
-                          <td className="px-2 py-1.5 whitespace-nowrap">
-                            {needsPicker ? (
-                              <select
-                                value={r.dependency_owner_id ?? ''}
-                                onChange={e => setDepOwnerOverrides(prev => ({ ...prev, [i]: e.target.value }))}
-                                className={`text-xs px-1.5 py-1 border rounded dark:bg-gray-800 dark:text-white ${
-                                  r.dependency_owner_id
-                                    ? 'border-gray-200 dark:border-gray-700'
-                                    : 'border-amber-400 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300'
-                                }`}
-                                title={`From file: "${r._depOwnerRaw}"`}
-                              >
-                                <option value="">— Leave unassigned —</option>
-                                {allMembers.map(m => (
-                                  <option key={m.id} value={m.id}>{m.full_name}</option>
-                                ))}
-                              </select>
-                            ) : <span className="text-gray-400">—</span>}
+                          <td className="px-2 py-1.5 whitespace-normal">
+                            {names.length === 0 ? (
+                              <span className="text-gray-400">—</span>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-1" title={`From file: "${names.join(', ')}"`}>
+                                {r.dependency_owner_ids.map(id => {
+                                  const m = allMembers.find(x => x.id === id)
+                                  return (
+                                    <span key={id} className="px-1.5 py-0.5 text-[11px] bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded">
+                                      {m?.full_name ?? 'Unknown'}
+                                    </span>
+                                  )
+                                })}
+                                {hasUnmatched && (
+                                  <select
+                                    value={depOwnerOverrides[i] ?? ''}
+                                    onChange={e => setDepOwnerOverrides(prev => ({ ...prev, [i]: e.target.value }))}
+                                    className="text-xs px-1.5 py-0.5 border border-amber-400 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 rounded"
+                                    title={`Unmatched: ${unmatched.join(', ')}`}
+                                  >
+                                    <option value="">— Pick for "{unmatched.join(', ')}" —</option>
+                                    {allMembers.map(m => (
+                                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={r.final_comments ?? undefined}>
                             {r.final_comments ?? <span className="text-gray-400">—</span>}
@@ -534,11 +560,11 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                 </p>
               )}
               {(() => {
-                const unmatched = mappedRows.filter(r => r._depOwnerRaw && !r.dependency_owner_id).length
-                if (unmatched === 0) return null
+                const rowsWithUnmatched = mappedRows.filter(r => (r._depOwnerUnmatched?.length ?? 0) > 0).length
+                if (rowsWithUnmatched === 0) return null
                 return (
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                    {unmatched} row{unmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user in the PM tool. Pick the matching user from the dropdown in the Dep. Owner column to set it, or leave unassigned to import without one.
+                    {rowsWithUnmatched} row{rowsWithUnmatched === 1 ? '' : 's'} have a Dependency Owner name that doesn't match any user. Use the dropdown in the Dep. Owner column to pick a user, or leave unassigned to import without one. Multiple owners can be comma-separated in the file (e.g. <code>Lokesh, Vimala Nayuni</code>).
                   </p>
                 )
               })()}

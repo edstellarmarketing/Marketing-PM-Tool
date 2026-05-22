@@ -46,6 +46,7 @@ function ToolbarBtn({
 
 export default function RichTextEditor({ value, onChange, placeholder }: Props) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
       Placeholder.configure({ placeholder: placeholder ?? 'Start writing…' }),

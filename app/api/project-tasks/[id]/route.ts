@@ -16,6 +16,7 @@ const updateSchema = z.object({
   dependency_details: z.string().max(2000).nullable().optional(),
   dependency_status: z.string().max(60).nullable().optional(),
   dependency_owner_id: z.string().uuid().nullable().optional(),
+  dependency_owner_ids: z.array(z.string().uuid()).max(50).nullable().optional(),
   final_comments: z.string().max(4000).nullable().optional(),
 })
 
@@ -28,10 +29,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = updateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
+  const payload: Record<string, unknown> = { ...parsed.data }
+  if (parsed.data.dependency_owner_ids !== undefined) {
+    const arr = parsed.data.dependency_owner_ids
+    payload.dependency_owner_ids = arr && arr.length > 0 ? arr : null
+    payload.dependency_owner_id = arr && arr.length > 0 ? arr[0] : null
+  }
+
   const supabase = await createClient()
   const { data, error: dbError } = await supabase
     .from('project_tasks')
-    .update(parsed.data)
+    .update(payload)
     .eq('id', id)
     .select()
     .single()
