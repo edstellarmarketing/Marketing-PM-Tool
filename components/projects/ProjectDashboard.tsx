@@ -34,6 +34,16 @@ function isOverdue(t: ProjectTask, today: string) {
   return t.status !== 'completed' && !!t.due_date && t.due_date < today
 }
 
+// Tasks that need urgent attention:
+//   - status is in_progress and due date is today or in the past, OR
+//   - status is pending (or anything other than completed) and due date is in the past
+// Completed tasks never need attention.
+function needsAttention(t: ProjectTask, today: string) {
+  if (t.status === 'completed' || !t.due_date) return false
+  if (t.status === 'in_progress') return t.due_date <= today
+  return t.due_date < today
+}
+
 const statusStyle: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',
   in_progress: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
@@ -154,10 +164,22 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
     })
   }, [tasks, activeOwnerId, search, statusFilter, statusValues, priorityValues, today])
 
-  const sortedRows = useMemo(() => {
-    if (!sortBy) return filtered
+  const attentionRows = useMemo(() => {
+    return filtered
+      .filter(t => needsAttention(t, today))
+      .sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
+      })
+  }, [filtered, today])
+
+  const sortedRegularRows = useMemo(() => {
+    const regular = filtered.filter(t => !needsAttention(t, today))
+    if (!sortBy) return regular
     const dir = sortDir === 'asc' ? 1 : -1
-    return [...filtered].sort((a, b) => {
+    return [...regular].sort((a, b) => {
       const av = a[sortBy]
       const bv = b[sortBy]
       if (!av && !bv) return 0
@@ -165,11 +187,12 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
       if (!bv) return -1
       return av < bv ? -dir : av > bv ? dir : 0
     })
-  }, [filtered, sortBy, sortDir])
+  }, [filtered, sortBy, sortDir, today])
 
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(sortedRegularRows.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const pageRows = sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const regularPageRows = sortedRegularRows.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const pageRows = [...attentionRows, ...regularPageRows]
 
   const canAddTask = owners.length > 0
 
@@ -575,13 +598,25 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
               ) : (
                 pageRows.map(t => {
                   const overdue = isOverdue(t, today)
+                  const attention = needsAttention(t, today)
                   const displayStatus = overdue ? 'overdue' : t.status
                   const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
                   const projectOwner = taskOwner?.user ?? null
+                  const rowBg = selectedIds.has(t.id)
+                    ? 'bg-blue-50/40 dark:bg-blue-950/20'
+                    : attention
+                      ? 'bg-red-100 dark:bg-red-950/50'
+                      : 'bg-white dark:bg-gray-900'
+                  const rowHover = attention
+                    ? 'hover:bg-red-200/80 dark:hover:bg-red-900/50'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  const groupHover = attention
+                    ? 'group-hover:bg-red-200/80 dark:group-hover:bg-red-900/50'
+                    : 'group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50'
                   return (
-                    <tr key={t.id} className={`group border-b border-gray-100 dark:border-gray-800 last:border-0 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
+                    <tr key={t.id} className={`group border-b border-gray-100 dark:border-gray-800 last:border-0 ${rowBg} ${rowHover}`}>
                       {isAdmin && (
-                        <td className={`px-3 py-3 sticky left-0 z-10 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50`}>
+                        <td className={`px-3 py-3 sticky left-0 z-10 ${rowBg} ${groupHover}`}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(t.id)}
@@ -591,7 +626,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                         </td>
                       )}
                       <td
-                        className={`px-4 py-3 sticky z-10 ${selectedIds.has(t.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'} group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50 shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
+                        className={`px-4 py-3 sticky z-10 ${rowBg} ${groupHover} shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
                         style={{ left: isAdmin ? 40 : 0 }}
                       >
                         <button
@@ -733,7 +768,12 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-3">
               <p>
-                Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length}
+                Showing {sortedRegularRows.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sortedRegularRows.length)} of {sortedRegularRows.length}
+                {attentionRows.length > 0 && (
+                  <span className="ml-2 text-red-600 dark:text-red-400">
+                    · {attentionRows.length} pinned (needs attention)
+                  </span>
+                )}
               </p>
               <label className="flex items-center gap-1.5">
                 <span>Rows per page</span>
