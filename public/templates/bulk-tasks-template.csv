@@ -1,0 +1,7 @@
+S.No,Title,Description,Category,Priority,Task Type,Complexity,Start Date,Due Date,Sub-tasks
+1,Launch May newsletter,Pull together this month's customer newsletter and send it through Mailchimp.,Marketing,High,monthly_task,medium,6/1/2026,6/5/2026,"Draft subject line, Write hero section, Pick 3 stories, Schedule send"
+2,Refresh pricing page hero,Update hero copy + screenshot for the new pricing tier.,Content,Medium,new_implementation,easy,6/2/2026,6/8/2026,"Rewrite headline, Capture screenshot, Push to staging"
+3,Q2 SEO audit fixes,Apply remediations identified in the Q2 audit.,SEO,High,monthly_task,difficult,5/28/2026,6/10/2026,"Fix duplicate titles, Add missing alt text, Update sitemap"
+4,Design social ad set,Three creative variations for the June campaign.,Design,Medium,new_implementation,medium,6/3/2026,6/9/2026,"Variation A, Variation B, Variation C, Hand off to media buyer"
+5,Weekly metrics dashboard,Refresh the weekly Looker board with the latest numbers.,Marketing,Low,monthly_task,easy,6/4/2026,6/4/2026,
+6,AI assistant prompt library,Curate a starter pack of prompts for the marketing team.,Content,Medium,ai,medium,6/5/2026,6/15/2026,"Outline categories, Write 10 prompts, Add usage examples"

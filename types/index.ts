@@ -68,6 +68,7 @@ export interface Task {
   parent_task_id: string | null
   scoring_locked: boolean
   source_announcement_id: string | null
+  sort_order: number | null
   created_at: string
   updated_at: string
 }

@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, GripVertical, CheckSquare, Link as LinkIcon, User, Calendar, LayoutList, Download, FileUp, NotebookPen, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, GripVertical, CheckSquare, Link as LinkIcon, User, Calendar, LayoutList, Download, FileUp, NotebookPen, X, Upload } from 'lucide-react'
 import Link from 'next/link'
 import TaskSuggestionPanel from '@/components/ai/TaskSuggestionPanel'
 import ScoringClassification from '@/components/tasks/ScoringClassification'
+import BulkUploadPersonalTasksModal from '@/components/tasks/BulkUploadPersonalTasksModal'
 import { computeScorePreview } from '@/lib/scoring'
 import RichTextEditor from '@/components/notes/RichTextEditor'
 import type { SubTask, TaskType, Complexity, PointConfig, Priority } from '@/types'
@@ -91,6 +92,7 @@ export default function NewTaskPage() {
   const [csvFileName, setCsvFileName] = useState<string | null>(null)
   const [csvWarnings, setCsvWarnings] = useState<string[]>([])
   const [dependencies, setDependencies] = useState<DependencyTask[]>([])
+  const [showBulkTasksModal, setShowBulkTasksModal] = useState(false)
 
   useEffect(() => {
     fetch('/api/point-config')
@@ -336,9 +338,19 @@ export default function NewTaskPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <Link href="/tasks" className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-5">
-        <ArrowLeft size={16} /> Back to Tasks
-      </Link>
+      <div className="flex items-center justify-between mb-5">
+        <Link href="/tasks" className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={16} /> Back to Tasks
+        </Link>
+        <button
+          type="button"
+          onClick={() => setShowBulkTasksModal(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+        >
+          <Upload size={14} />
+          Bulk Upload Tasks
+        </button>
+      </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <h1 className="text-xl font-bold text-gray-900 mb-6">Create New Task</h1>
@@ -721,6 +733,19 @@ export default function NewTaskPage() {
           </div>
         </form>
       </div>
+
+      {showBulkTasksModal && (
+        <BulkUploadPersonalTasksModal
+          pointConfigs={configs}
+          categoryNames={categories.map(c => c.name)}
+          onClose={() => setShowBulkTasksModal(false)}
+          onImported={() => {
+            setShowBulkTasksModal(false)
+            router.push('/tasks')
+            router.refresh()
+          }}
+        />
+      )}
     </div>
   )
 }

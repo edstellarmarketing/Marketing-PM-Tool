@@ -21,7 +21,7 @@ export default async function TasksPage({ searchParams }: Props) {
   if (profile?.role === 'admin') redirect('/dashboard')
   const isAdmin = false
 
-  let query = adminClient.from('tasks').select('*').or(`user_id.eq.${user!.id},assigned_by.eq.${user!.id}`).order('due_date', { ascending: true, nullsFirst: false })
+  let query = adminClient.from('tasks').select('*').or(`user_id.eq.${user!.id},assigned_by.eq.${user!.id}`).order('sort_order', { ascending: true, nullsFirst: false }).order('due_date', { ascending: true, nullsFirst: false })
 
   if (params.status) query = query.eq('status', params.status)
   if (params.priority) query = query.eq('priority', params.priority)
