@@ -4,6 +4,7 @@ import MonthSelector from '@/components/plans/MonthSelector'
 import LeaderboardTable from '@/components/leaderboard/LeaderboardTable'
 import ScoreHistoryChart from '@/components/leaderboard/ScoreHistoryChart'
 import RankBadge from '@/components/leaderboard/RankBadge'
+import AwardSpotlightCarousel, { type SpotlightSlide } from '@/components/leaderboard/AwardSpotlightCarousel'
 import { computeStreak, computeBadges } from '@/lib/scoring'
 import type { MonthlyScore, UserAward } from '@/types'
 import type { LeaderboardRow } from '@/components/leaderboard/LeaderboardTable'
@@ -29,7 +30,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
     supabase.from('monthly_scores').select('*').eq('user_id', user!.id).eq('month', month).eq('year', year).single(),
     supabase.from('tasks').select('task_type,complexity,status,score_earned,score_weight')
       .eq('user_id', user!.id).eq('status', 'done').eq('is_draft', false),
-    supabase.from('user_awards').select('*, award_types(id,name,icon,bonus_points)').order('created_at', { ascending: false }),
+    supabase.from('user_awards').select('*, award_types(id,name,icon,bonus_points), tasks(id,title)').order('created_at', { ascending: false }),
   ])
 
   const rows = (leaderboardRes.data ?? []) as LeaderboardRow[]
@@ -38,8 +39,12 @@ export default async function LeaderboardPage({ searchParams }: Props) {
   const myDoneTasks = (myTasksRes.data ?? []) as { task_type: string | null; complexity: string | null; status: string; score_earned: number; score_weight: number }[]
   const allAwards = (allAwardsRes.data ?? []) as UserAward[]
 
+  // Awards for the currently-viewed month (filter for spotlight + count)
+  const currentMonthAwards = allAwards.filter(a => a.month === month && a.year === year)
+  const uniqueAwardeesThisMonth = new Set(currentMonthAwards.map(a => a.user_id)).size
+
   // Fetch profiles for all award recipients
-  const spotlightAwards = allAwards.slice(0, 5)
+  const spotlightAwards = currentMonthAwards.slice(0, 5)
   const awardUserIds = [...new Set(allAwards.map(a => a.user_id))]
   const { data: awardProfiles } = awardUserIds.length > 0
     ? await supabase.from('profiles').select('id,full_name,avatar_url').in('id', awardUserIds)
@@ -62,6 +67,22 @@ export default async function LeaderboardPage({ searchParams }: Props) {
   const earnedBadges = badges.filter(b => b.earned)
 
   const myRank = rows.find(r => r.user_id === user!.id)
+
+  const spotlightSlides: SpotlightSlide[] = spotlightAwards.map(award => {
+    const profile = awardProfileMap[award.user_id]
+    return {
+      id: award.id,
+      bonus_points: award.bonus_points,
+      month: award.month,
+      year: award.year,
+      note: award.note,
+      award_icon: award.award_types?.icon ?? '🏅',
+      award_name: award.award_types?.name ?? 'Award',
+      task_title: award.tasks?.title ?? null,
+      user_full_name: profile?.full_name ?? 'User',
+      user_avatar_url: profile?.avatar_url ?? null,
+    }
+  })
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -135,46 +156,20 @@ export default async function LeaderboardPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Rankings + Award Spotlight side by side */}
-      <div className="flex gap-5 items-start">
-        <div className="flex-1 bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Rankings</h2>
-          <LeaderboardTable rows={rows} currentUserId={user!.id} />
-        </div>
+      {/* Award Spotlight — auto-rotating carousel */}
+      {spotlightSlides.length > 0 && (
+        <AwardSpotlightCarousel
+          slides={spotlightSlides}
+          totalAwards={allAwards.length}
+          recipientCount={uniqueAwardeesThisMonth}
+          monthLabel={`${MONTHS_ABBR[month - 1]} ${year}`}
+        />
+      )}
 
-        {spotlightAwards.length > 0 && (
-          <div className="w-56 flex-shrink-0 bg-white border border-amber-200 rounded-xl p-4">
-            <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-1.5 text-sm">
-              <span>🏅</span> Award Spotlight
-            </h2>
-            <div className="space-y-4">
-              {spotlightAwards.map(award => {
-                const profile = awardProfileMap[award.user_id]
-                const at = award.award_types
-                return (
-                  <div key={award.id} className="text-center">
-                    {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.full_name} className="w-10 h-10 rounded-full object-cover mx-auto" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold mx-auto">
-                        {(profile?.full_name ?? '?').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                      </div>
-                    )}
-                    <p className="text-xs font-semibold text-gray-900 mt-1 truncate">{profile?.full_name ?? 'User'}</p>
-                    <span className="text-xl">{at?.icon ?? '🏅'}</span>
-                    <p className="text-xs text-gray-700 font-medium leading-tight">{at?.name ?? 'Award'}</p>
-                    <p className="text-xs text-amber-600 font-bold mt-0.5">+{award.bonus_points} pts · {MONTHS_ABBR[award.month - 1]} {award.year}</p>
-                  </div>
-                )
-              })}
-            </div>
-            {allAwards.length > 5 && (
-              <a href="#all-awards" className="block text-center text-xs text-blue-600 hover:underline mt-3">
-                View All Awards ↓
-              </a>
-            )}
-          </div>
-        )}
+      {/* Rankings */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Rankings</h2>
+        <LeaderboardTable rows={rows} currentUserId={user!.id} />
       </div>
 
       {/* Score history */}
