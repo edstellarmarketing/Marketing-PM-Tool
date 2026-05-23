@@ -7,7 +7,7 @@ import RewardStrip from '@/components/announcements/RewardStrip'
 import ScreenshotGallery from '@/components/announcements/ScreenshotGallery'
 import { signMany } from '@/lib/attachments'
 import AnnouncementDeleteButton from '@/components/admin/AnnouncementDeleteButton'
-import AcceptanceRequestsPanel, { type AcceptanceRow } from '@/components/admin/AcceptanceRequestsPanel'
+import TaggedUsersPanel, { type TaggedUserRow } from '@/components/admin/TaggedUsersPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,38 +37,73 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
   if (!annRes.data) notFound()
   const a = annRes.data
 
-  // Profile lookups for accepters + creator
+  // Build the "member roster" relevant to this announcement:
+  //   • target_mode='users'      → just the tagged users
+  //   • target_mode='department' → all active non-admin members in target depts
   const accIds = (acceptancesRes.data ?? []).map(r => r.user_id)
-  const profileIds = Array.from(new Set([a.created_by, ...accIds].filter(Boolean))) as string[]
-  const { data: profileRows } = await admin
-    .from('profiles')
-    .select('id, full_name, avatar_url, department')
-    .in('id', profileIds)
+  let rosterIds: string[] = []
+  if (a.target_mode === 'users') {
+    rosterIds = (a.user_ids ?? []) as string[]
+  } else {
+    const { data: deptMembers } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('is_active', true)
+      .neq('role', 'admin')
+      .in('department', (a.departments ?? []) as string[])
+    rosterIds = (deptMembers ?? []).map(m => m.id)
+  }
+
+  // Always also fetch creator + any extra accepters (in case someone outside the
+  // current roster has an old acceptance row — e.g. dept-targeted then dept changed)
+  const profileIds = Array.from(new Set([a.created_by, ...accIds, ...rosterIds].filter(Boolean))) as string[]
+  const { data: profileRows } = profileIds.length > 0
+    ? await admin
+        .from('profiles')
+        .select('id, full_name, avatar_url, department')
+        .in('id', profileIds)
+    : { data: [] as { id: string; full_name: string; avatar_url: string | null; department: string | null }[] }
   const pById = Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
-  const acceptances: AcceptanceRow[] = (acceptancesRes.data ?? []).map(r => ({
-    id: r.id,
-    user_id: r.user_id,
-    status: r.status,
-    task_id: r.task_id,
-    requested_at: r.requested_at,
-    approved_at: r.approved_at,
-    user: pById[r.user_id]
-      ? {
-          full_name: pById[r.user_id].full_name,
-          avatar_url: pById[r.user_id].avatar_url,
-          department: pById[r.user_id].department,
-        }
-      : null,
-  }))
+  // Build the per-user status map keyed by user_id
+  const acceptanceByUserId: Record<string, { id: string; status: 'requested' | 'approved'; task_id: string | null; requested_at: string; approved_at: string | null }> = {}
+  for (const r of acceptancesRes.data ?? []) {
+    acceptanceByUserId[r.user_id] = {
+      id: r.id, status: r.status, task_id: r.task_id, requested_at: r.requested_at, approved_at: r.approved_at,
+    }
+  }
+
+  // Compose roster rows (including any acceptances from users no longer in the
+  // department roster, so the page never loses sight of a real accepter).
+  const rosterIdSet = new Set(rosterIds)
+  for (const uid of accIds) rosterIdSet.add(uid)
+  const taggedUsers: TaggedUserRow[] = Array.from(rosterIdSet)
+    .map(uid => pById[uid])
+    .filter(Boolean)
+    .map((p) => {
+      const acc = acceptanceByUserId[p.id]
+      return {
+        id: p.id,
+        full_name: p.full_name,
+        avatar_url: p.avatar_url,
+        department: p.department,
+        status: acc?.status ?? 'not_yet',
+        acceptance_id: acc?.id ?? null,
+        task_id: acc?.task_id ?? null,
+        requested_at: acc?.requested_at ?? null,
+        approved_at: acc?.approved_at ?? null,
+      }
+    })
+    // Stable ordering: name A→Z (the panel will re-group by status for dept mode)
+    .sort((x, y) => x.full_name.localeCompare(y.full_name))
 
   // Sign URLs for announcement attachments
   const annSigned = await signMany('announcement-attachments', (annAttRes.data ?? []).map(x => x.storage_path))
 
   // Proof attachments across all approved acceptance tasks
-  const approvedTaskIds = acceptances
-    .filter(r => r.status === 'approved' && r.task_id)
-    .map(r => r.task_id!) as string[]
+  const approvedTaskIds = Object.values(acceptanceByUserId)
+    .filter(a => a.status === 'approved' && a.task_id)
+    .map(a => a.task_id!) as string[]
   let proofItems: { id: string; file_name: string; viewUrl: string | null }[] = []
   if (approvedTaskIds.length > 0) {
     const { data: proofRows } = await admin
@@ -149,13 +184,17 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
         </section>
       )}
 
-      {acceptances.length > 0 && (
+      {taggedUsers.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Acceptances</h2>
-          <AcceptanceRequestsPanel
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            {a.target_mode === 'users' ? 'Tagged users' : 'Department members'}
+          </h2>
+          <TaggedUsersPanel
             announcementId={id}
-            acceptances={acceptances}
+            members={taggedUsers}
             totalBonus={a.bonus_points ?? 0}
+            mode={a.target_mode === 'users' ? 'users' : 'department'}
+            announcementUserIds={(a.user_ids ?? []) as string[]}
           />
         </section>
       )}
