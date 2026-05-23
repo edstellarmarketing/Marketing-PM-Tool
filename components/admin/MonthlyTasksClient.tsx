@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ChevronDown, X, UserPlus, Check, Search } from 'lucide-react'
-
-export const MONTHLY_TASKS_STORAGE_KEY = 'monthly-tasks-added'
+import { useMemo, useState, useEffect } from 'react'
+import Link from 'next/link'
+import { ChevronDown } from 'lucide-react'
 
 interface MemberOption {
   id: string
@@ -12,8 +10,17 @@ interface MemberOption {
   avatar_url?: string | null
 }
 
+type Mode = 'admin' | 'member'
+
 interface Props {
   members: MemberOption[]
+  /** Map of 'YYYY-MM' -> non-admin user_ids who have ≥1 task with due_date in that month. */
+  usersByMonth: Record<string, string[]>
+  /** 'admin' (default) shows multi-user clusters and full filter row.
+   *  'member' shows only the current user's avatar, larger, with no user filter. */
+  mode?: Mode
+  /** Required when mode='member'. Used to render the single avatar and build tile hrefs. */
+  currentUserId?: string
 }
 
 const MONTHS = [
@@ -42,7 +49,7 @@ const MONTH_TILE_STYLE: Record<number, { idle: string; active: string }> = {
 }
 
 const MIN_YEAR = 2026
-const MIN_MONTH = 6
+const MIN_MONTH = 5
 
 function isMonthAllowed(year: number, monthIndex1: number) {
   if (year < MIN_YEAR) return false
@@ -54,22 +61,23 @@ function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function Avatar({ user, ring = '' }: { user: MemberOption; ring?: string }) {
+function Avatar({ user, ring = '', size = 'sm' }: { user: MemberOption; ring?: string; size?: 'sm' | 'lg' }) {
   const ringCls = ring ? `ring-2 ${ring}` : ''
+  const sizeCls = size === 'lg' ? 'w-14 h-14 text-base' : 'w-7 h-7 text-[10px]'
   if (user.avatar_url) {
     return (
       <img
         src={user.avatar_url}
         alt={user.full_name}
         title={user.full_name}
-        className={`w-7 h-7 rounded-full object-cover ${ringCls}`}
+        className={`rounded-full object-cover ${sizeCls} ${ringCls}`}
       />
     )
   }
   return (
     <div
       title={user.full_name}
-      className={`w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[10px] font-bold flex items-center justify-center ${ringCls}`}
+      className={`rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold flex items-center justify-center ${sizeCls} ${ringCls}`}
     >
       {initials(user.full_name)}
     </div>
@@ -80,8 +88,8 @@ function monthKey(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
-export default function MonthlyTasksClient({ members }: Props) {
-  const router = useRouter()
+export default function MonthlyTasksClient({ members, usersByMonth, mode = 'admin', currentUserId }: Props) {
+  const isMember = mode === 'member'
   const now = new Date()
   const currentYear = Math.max(now.getFullYear(), MIN_YEAR)
   const currentMonth = isMonthAllowed(now.getFullYear(), now.getMonth() + 1)
@@ -91,23 +99,6 @@ export default function MonthlyTasksClient({ members }: Props) {
   const [userId, setUserId] = useState<string>('all')
   const [year, setYear] = useState<number>(currentYear)
   const [month, setMonth] = useState<number>(currentMonth)
-
-  const [addUsersFor, setAddUsersFor] = useState<{ year: number; month: number } | null>(null)
-  const [addedByMonth, setAddedByMonth] = useState<Record<string, string[]>>({})
-  const [hydrated, setHydrated] = useState(false)
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(MONTHLY_TASKS_STORAGE_KEY)
-      if (raw) setAddedByMonth(JSON.parse(raw))
-    } catch {}
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    try { localStorage.setItem(MONTHLY_TASKS_STORAGE_KEY, JSON.stringify(addedByMonth)) } catch {}
-  }, [addedByMonth, hydrated])
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members])
 
@@ -130,50 +121,42 @@ export default function MonthlyTasksClient({ members }: Props) {
     }
   }, [year, month, visibleMonths])
 
-  function openAddUsers(m: number) {
-    setMonth(m)
-    setAddUsersFor({ year, month: m })
+  function usersForMonth(y: number, m: number): MemberOption[] {
+    const ids = usersByMonth[monthKey(y, m)] ?? []
+    const scoped = isMember && currentUserId
+      ? ids.filter(id => id === currentUserId)
+      : (userId === 'all' ? ids : ids.filter(id => id === userId))
+    return scoped.map(id => memberById.get(id)).filter(Boolean) as MemberOption[]
   }
 
-  function addUser(userId: string) {
-    if (!addUsersFor) return
-    const key = monthKey(addUsersFor.year, addUsersFor.month)
-    setAddedByMonth(prev => {
-      const list = prev[key] ?? []
-      if (list.includes(userId)) return prev
-      return { ...prev, [key]: [...list, userId] }
-    })
-  }
-
-  function removeUser(userId: string) {
-    if (!addUsersFor) return
-    const key = monthKey(addUsersFor.year, addUsersFor.month)
-    setAddedByMonth(prev => {
-      const list = prev[key] ?? []
-      return { ...prev, [key]: list.filter(id => id !== userId) }
-    })
+  function hrefForMonth(y: number, m: number): string {
+    const mm = String(m).padStart(2, '0')
+    if (isMember && currentUserId) return `/user/monthly-tasks/${y}/${mm}/${currentUserId}`
+    return `/admin/monthly-tasks/${y}/${mm}`
   }
 
   return (
     <div>
       <div className="sticky top-0 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-col">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">User</label>
-            <div className="relative">
-              <select
-                value={userId}
-                onChange={e => setUserId(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
-              >
-                <option value="all">All users</option>
-                {members.map(m => (
-                  <option key={m.id} value={m.id}>{m.full_name}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          {!isMember && (
+            <div className="flex flex-col">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">User</label>
+              <div className="relative">
+                <select
+                  value={userId}
+                  onChange={e => setUserId(e.target.value)}
+                  className="appearance-none pl-3 pr-8 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                >
+                  <option value="all">All users</option>
+                  {members.map(m => (
+                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex flex-col">
             <label className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Year</label>
@@ -217,31 +200,39 @@ export default function MonthlyTasksClient({ members }: Props) {
             {visibleMonths.map(m => {
               const style = MONTH_TILE_STYLE[m]
               const active = m === month
-              const addedIds = addedByMonth[monthKey(year, m)] ?? []
-              const addedUsers = addedIds.map(id => memberById.get(id)).filter(Boolean) as MemberOption[]
-              const visibleAvatars = addedUsers.slice(0, 6)
-              const extraCount = addedUsers.length - visibleAvatars.length
+              const monthUsers = usersForMonth(year, m)
+              const visibleAvatars = monthUsers.slice(0, 6)
+              const extraCount = monthUsers.length - visibleAvatars.length
+              const href = hrefForMonth(year, m)
+              const memberHasTasks = isMember && monthUsers.length > 0
+              const memberEmpty = isMember && monthUsers.length === 0
               return (
-                <button
+                <Link
                   key={m}
-                  type="button"
-                  onClick={() => openAddUsers(m)}
-                  className={`border rounded-xl px-5 py-6 text-left transition-colors ${active ? style.active : style.idle}`}
+                  href={href}
+                  onMouseEnter={() => setMonth(m)}
+                  className={`border rounded-xl px-5 py-6 text-left transition-colors block ${active ? style.active : style.idle} ${memberEmpty ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-2xl font-bold uppercase tracking-wide">{MONTH_SHORT[m - 1]}</p>
                       <p className={`text-sm mt-1 ${active ? 'text-white/80' : 'opacity-70'}`}>{year}</p>
                     </div>
-                    {addedUsers.length > 0 && (
+                    {!isMember && monthUsers.length > 0 && (
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white/60 dark:bg-gray-800/60'}`}>
-                        {addedUsers.length}
+                        {monthUsers.length}
                       </span>
                     )}
                   </div>
-                  <div className="mt-4 min-h-[28px] flex items-center">
-                    {addedUsers.length === 0 ? (
-                      <p className={`text-xs ${active ? 'text-white/70' : 'opacity-60'}`}>No users added yet</p>
+                  <div className={`mt-4 flex items-center ${isMember ? 'min-h-[56px]' : 'min-h-[28px]'}`}>
+                    {isMember ? (
+                      memberHasTasks ? (
+                        <Avatar user={monthUsers[0]} size="lg" ring={active ? 'ring-white/80' : 'ring-white dark:ring-gray-900'} />
+                      ) : (
+                        <p className={`text-xs ${active ? 'text-white/70' : 'opacity-60'}`}>No tasks this month</p>
+                      )
+                    ) : monthUsers.length === 0 ? (
+                      <p className={`text-xs ${active ? 'text-white/70' : 'opacity-60'}`}>No users with tasks yet</p>
                     ) : (
                       <div className="flex items-center -space-x-2">
                         {visibleAvatars.map(u => (
@@ -255,150 +246,11 @@ export default function MonthlyTasksClient({ members }: Props) {
                       </div>
                     )}
                   </div>
-                </button>
+                </Link>
               )
             })}
           </div>
         )}
-      </div>
-
-      {addUsersFor && (
-        <AddUsersModal
-          year={addUsersFor.year}
-          month={addUsersFor.month}
-          members={members}
-          addedIds={addedByMonth[monthKey(addUsersFor.year, addUsersFor.month)] ?? []}
-          onAdd={addUser}
-          onRemove={removeUser}
-          onClose={() => setAddUsersFor(null)}
-          onDone={() => {
-            const y = addUsersFor.year
-            const m = String(addUsersFor.month).padStart(2, '0')
-            setAddUsersFor(null)
-            router.push(`/admin/monthly-tasks/${y}/${m}`)
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function AddUsersModal({
-  year, month, members, addedIds, onAdd, onRemove, onClose, onDone,
-}: {
-  year: number
-  month: number
-  members: MemberOption[]
-  addedIds: string[]
-  onAdd: (userId: string) => void
-  onRemove: (userId: string) => void
-  onClose: () => void
-  onDone: () => void
-}) {
-  const backdropRef = useRef<HTMLDivElement>(null)
-  const [search, setSearch] = useState('')
-
-  const addedSet = useMemo(() => new Set(addedIds), [addedIds])
-  const filteredMembers = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return members
-    return members.filter(m => m.full_name.toLowerCase().includes(q))
-  }, [members, search])
-
-  function handleBackdropClick(e: React.MouseEvent) {
-    if (e.target === backdropRef.current) onClose()
-  }
-
-  return (
-    <div
-      ref={backdropRef}
-      onClick={handleBackdropClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-    >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">Add users to {MONTHS[month - 1]} {year}</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {addedIds.length} of {members.length} added
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-5 pt-3 pb-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search users…"
-              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="overflow-y-auto flex-1 px-2 pb-3">
-          {filteredMembers.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No users match your search.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-              {filteredMembers.map(m => {
-                const added = addedSet.has(m.id)
-                return (
-                  <li key={m.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Avatar user={m} />
-                      <span className="text-sm text-gray-900 dark:text-white truncate">{m.full_name}</span>
-                    </div>
-                    {added ? (
-                      <button
-                        type="button"
-                        onClick={() => onRemove(m.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-                      >
-                        <Check size={12} />
-                        Added
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onAdd(m.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                      >
-                        <UserPlus size={12} />
-                        Add
-                      </button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 dark:border-gray-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            disabled={addedIds.length === 0}
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Done
-          </button>
-        </div>
       </div>
     </div>
   )

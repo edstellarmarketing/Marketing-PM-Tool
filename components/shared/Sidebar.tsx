@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { href: '/projects', label: 'Projects', icon: <FolderKanban size={18} /> },
   { href: '/admin/all-tasks', label: 'All Tasks', icon: <ListChecks size={18} />, adminOnly: true },
   { href: '/admin/monthly-tasks', label: 'Monthly Tasks', icon: <CalendarRange size={18} />, adminOnly: true },
+  { href: '/user/monthly-tasks', label: 'Monthly Tasks', icon: <CalendarRange size={18} />, memberOnly: true },
   { href: '/tasks', label: 'My Tasks', icon: <CheckSquare size={18} />, memberOnly: true },
   { href: '/notes', label: 'Meeting Notes', icon: <NotebookPen size={18} />, memberOnly: true },
   { href: '/attendance', label: 'Attendance', icon: <CalendarCheck size={18} />, memberOnly: true },

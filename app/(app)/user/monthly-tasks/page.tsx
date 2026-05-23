@@ -7,47 +7,52 @@ const MIN_YEAR = 2026
 const MIN_MONTH = 5
 
 function monthKeyOf(dateStr: string): string {
-  // dateStr is 'YYYY-MM-DD'; safe substring
   return dateStr.slice(0, 7)
 }
 
-export default async function MonthlyTasksPage() {
+export default async function MemberMonthlyTasksPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  // Members and admins both land here; admins should use /admin/monthly-tasks instead.
+  // We don't redirect — just render the member-mode UI scoped to the auth user.
 
   const adminClient = createAdminClient()
   const minDate = `${MIN_YEAR}-${String(MIN_MONTH).padStart(2, '0')}-01`
 
-  const [{ data: members }, { data: monthlyTaskRows }] = await Promise.all([
+  const [{ data: profile }, { data: tasks }] = await Promise.all([
     adminClient
       .from('profiles')
       .select('id, full_name, avatar_url')
-      .eq('role', 'member')
-      .eq('is_active', true)
-      .order('full_name'),
+      .eq('id', user.id)
+      .single(),
     adminClient
       .from('tasks')
-      .select('user_id, due_date')
+      .select('due_date')
+      .eq('user_id', user.id)
       .neq('is_draft', true)
       .is('parent_task_id', null)
       .not('due_date', 'is', null)
       .gte('due_date', minDate),
   ])
 
-  const memberIds = new Set((members ?? []).map(m => m.id))
+  if (!profile) redirect('/dashboard')
 
-  // Group user_ids per month-key 'YYYY-MM'
   const usersByMonth: Record<string, string[]> = {}
-  for (const row of monthlyTaskRows ?? []) {
-    if (!row.due_date || !memberIds.has(row.user_id)) continue
+  for (const row of tasks ?? []) {
+    if (!row.due_date) continue
     const key = monthKeyOf(row.due_date)
     const list = usersByMonth[key] ?? (usersByMonth[key] = [])
-    if (!list.includes(row.user_id)) list.push(row.user_id)
+    if (!list.includes(user.id)) list.push(user.id)
   }
 
-  return <MonthlyTasksClient members={members ?? []} usersByMonth={usersByMonth} />
+  return (
+    <MonthlyTasksClient
+      members={[profile]}
+      usersByMonth={usersByMonth}
+      mode="member"
+      currentUserId={user.id}
+    />
+  )
 }

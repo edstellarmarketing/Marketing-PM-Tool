@@ -22,7 +22,7 @@ function lastDayOfMonth(year: number, month1: number): number {
   return new Date(year, month1, 0).getDate()
 }
 
-export default async function MonthUserPage({ params }: { params: Promise<{ year: string; month: string; userId: string }> }) {
+export default async function MemberMonthUserPage({ params }: { params: Promise<{ year: string; month: string; userId: string }> }) {
   const { year: yearStr, month: monthStr, userId } = await params
   const year = Number(yearStr)
   const month = Number(monthStr)
@@ -32,8 +32,8 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  // Members can only view their own page. Admins should use the /admin route.
+  if (user.id !== userId) redirect('/user/monthly-tasks')
 
   const adminClient = createAdminClient()
   const startOfMonth = `${year}-${pad2(month)}-01`
@@ -103,6 +103,8 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
       tasks={tasks}
       score={score}
       awards={awards}
+      backHref="/user/monthly-tasks"
+      backLabel="Monthly Tasks"
     />
   )
 }
