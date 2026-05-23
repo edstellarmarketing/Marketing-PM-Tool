@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { X, Upload, Download, Check, AlertCircle, Copy, ExternalLink } from 'lucide-react'
+import { X, Upload, Download, Check, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import type { Profile, ProjectOwner } from '@/types'
 
@@ -152,15 +152,6 @@ function parseDate(raw: unknown): string | null {
   return null
 }
 
-const TEMPLATE_CSV = `Title,Description,Status,Priority,Progress,Start Date,Due Date,Dependency Task,Dependency Details,Dependency Status,Dependency Owner,Final Comments
-Header design,Build the responsive site header with sticky navigation,In Progress,High,40,2026-06-01,2026-06-15,Brand guidelines sign-off,Need final logo + colour tokens before final pass,In Review,Marketing,Awaiting brand sign-off; once approved, can wrap in a day.
-Footer revamp,Replace legacy footer with the new component,Pending,Medium,0,2026-06-10,2026-06-20,,,,,
-Homepage hero animation,Implement scroll-triggered hero section,Pending,High,0,2026-06-12,2026-06-22,Hero copy approval,Awaiting final hero copy from content team,Pending,Content,Blocked until content team finalises copy.
-SEO audit fixes,Apply remediations from the Q2 SEO audit,Completed,Medium,100,2026-05-20,2026-05-30,,,,,Done — all audit items addressed.
-Form validation refactor,Move all forms to react-hook-form + zod,In Progress,Critical,65,2026-05-28,2026-06-10,API error contract,Backend needs to standardise validation error payload,In Progress,Backend,Frontend pieces done; integration paused on backend contract.
-Sitemap & robots.txt,Generate and ship the production sitemap and robots,Pending,Low,0,2026-06-15,2026-06-25,,,,,
-`
-
 export default function BulkUploadTasksModal({ projectId, owner, allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [headers, setHeaders] = useState<string[]>([])
@@ -173,23 +164,10 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ inserted: number } | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [showTemplate, setShowTemplate] = useState(false)
   // Per-row overrides for unmatched dependency owners. Keyed by row index in
   // rawRows, value is the chosen user id for the first unmatched name. ''
   // means "leave unassigned".
   const [depOwnerOverrides, setDepOwnerOverrides] = useState<Record<number, string>>({})
-
-  async function copyTemplate() {
-    try {
-      await navigator.clipboard.writeText(TEMPLATE_CSV)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard API might be blocked — reveal the textarea so the user can copy manually.
-      setShowTemplate(true)
-    }
-  }
 
   // Project owner is derived from the owner this upload is scoped to; we don't ask for it in the CSV.
   const projectOwnerName = owner.user?.full_name ?? '—'
@@ -373,60 +351,12 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
               <Download size={15} />
               Excel Template
             </a>
-            <a
-              href="/api/templates/project-tasks"
-              download="bulk-task-template.csv"
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
-              <Download size={15} />
-              CSV Template
-            </a>
-            <a
-              href="https://docs.google.com/spreadsheets/d/1-7-SY76p2cgXyzHXs4UFkWopjxbsUZcxb5xOVkV8E4g/edit?usp=sharing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
-              <ExternalLink size={15} />
-              Open in Google Sheets
-            </a>
-            <button
-              type="button"
-              onClick={copyTemplate}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-              title="Copy CSV — paste into Notepad and save as .csv"
-            >
-              {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
-              {copied ? 'Copied!' : 'Copy CSV'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTemplate(v => !v)}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              {showTemplate ? 'Hide template' : 'Show template'}
-            </button>
             {rawRows.length > 0 && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {rawRows.length} rows parsed · {headers.length} columns
               </span>
             )}
           </div>
-
-          {showTemplate && (
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                Select all (Ctrl+A) → Copy (Ctrl+C) → paste into Notepad → Save As <code>project-tasks-template.csv</code> (set "Save as type" to "All files").
-              </p>
-              <textarea
-                readOnly
-                value={TEMPLATE_CSV}
-                rows={8}
-                onFocus={e => e.currentTarget.select()}
-                className="w-full font-mono text-xs px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg"
-              />
-            </div>
-          )}
 
           {error && (
             <p className="flex items-start gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-lg px-3 py-2">
