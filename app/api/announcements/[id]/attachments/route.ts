@@ -19,16 +19,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const [{ data: profile }, { data: announcement }] = await Promise.all([
     admin.from('profiles').select('role, department').eq('id', user!.id).single(),
-    admin.from('announcements').select('id, departments').eq('id', id).single(),
+    admin.from('announcements').select('id, departments, user_ids, target_mode').eq('id', id).single(),
   ])
 
   if (!announcement) return NextResponse.json({ error: 'Announcement not found' }, { status: 404 })
 
   const isAdmin = profile?.role === 'admin'
   const dept = profile?.department?.trim() ?? null
-  const inDept = dept ? announcement.departments.includes(dept) : false
+  const inDept = dept ? (announcement.departments ?? []).includes(dept) : false
+  const inUserList = (announcement.user_ids ?? []).includes(user!.id)
 
-  if (!isAdmin && !inDept) {
+  if (!isAdmin && !inDept && !inUserList) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -11,7 +11,8 @@ interface Props {
   announcement: AnnouncementRow
   attachments?: AttachmentRow[]
   onClose: () => void
-  onAccepted?: (taskId: string) => void
+  /** Called after the server responds — passes the new status so the parent can refresh. */
+  onAccepted?: (result: { status: 'requested' | 'approved'; task_id: string | null }) => void
   /** Where the "Back" button on the success card should go. */
   backHref?: string
 }
@@ -28,6 +29,7 @@ export default function AcceptConfirmationModal({
   const [error, setError] = useState<string | null>(null)
   const [taken, setTaken] = useState(false)
   const [acceptedTaskId, setAcceptedTaskId] = useState<string | null>(null)
+  const [requested, setRequested] = useState(false)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -49,15 +51,21 @@ export default function AcceptConfirmationModal({
         headers: { 'Content-Type': 'application/json' },
       })
       const data = await res.json().catch(() => null)
-      if (res.status === 409 && data?.code === 'already_accepted') {
+      if (res.status === 409 && (data?.code === 'already_accepted' || data?.code === 'closed')) {
         setTaken(true)
         return
       }
       if (!res.ok) {
         throw new Error(typeof data?.error === 'string' ? data.error : `Accept failed (${res.status})`)
       }
-      setAcceptedTaskId(data.task_id as string)
-      onAccepted?.(data.task_id as string)
+      const status = data?.status as 'requested' | 'approved'
+      const taskId = (data?.task_id as string | null) ?? null
+      if (status === 'approved') {
+        setAcceptedTaskId(taskId)
+      } else {
+        setRequested(true)
+      }
+      onAccepted?.({ status, task_id: taskId })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Accept failed.')
     } finally {
@@ -83,6 +91,24 @@ export default function AcceptConfirmationModal({
           bonusPoints={announcement.bonus_points}
           backHref={backHref}
         />
+      ) : requested ? (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center space-y-3">
+          <p className="text-2xl">⏳</p>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Request submitted</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            The admin will review and approve finalists. If approved, the task will appear on your list and you&apos;ll see it on the Announcements page under <em>My approved</em>.
+          </p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+            Bonus points are split equally among everyone the admin approves on this announcement.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-2 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+          >
+            Close
+          </button>
+        </div>
       ) : (
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">

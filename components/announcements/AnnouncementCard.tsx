@@ -12,7 +12,7 @@ interface Props {
   variant: 'full' | 'compact'
   /** When true, render the slim reward strip and no Accept button. */
   showAcceptedState?: boolean
-  onAccepted?: (taskId: string) => void
+  onAccepted?: (result: { status: 'requested' | 'approved'; task_id: string | null }) => void
 }
 
 function formatDate(d: string): string {
@@ -40,7 +40,7 @@ export default function AnnouncementCard({
   if (variant === 'compact') {
     const totalPoints = taskPoints + (announcement.bonus_points ?? 0)
     return (
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-3 flex items-center gap-3 min-w-[260px] flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-3 flex items-center gap-3 w-full">
         <div className="flex flex-col items-center justify-center w-14 h-14 rounded-xl flex-shrink-0 text-white shadow-sm bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-400 dark:to-amber-600">
           <span className="text-xl font-extrabold leading-none">{totalPoints}</span>
           <span className="text-[9px] tracking-widest mt-0.5">PTS</span>
@@ -73,9 +73,10 @@ export default function AnnouncementCard({
       />
 
       <div>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-white">{announcement.title}</h3>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white break-words">{announcement.title}</h3>
         {announcement.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-line">{announcement.description}</p>
+          // Full text always — no line-clamp, no truncate. break-words handles long unbroken strings.
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-line break-words">{announcement.description}</p>
         )}
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>Due <strong className="text-gray-700 dark:text-gray-200">{formatDate(announcement.due_date)}</strong></span>
@@ -83,9 +84,13 @@ export default function AnnouncementCard({
           {announcement.task_type && (
             <span>Type <strong className="text-gray-700 dark:text-gray-200">{announcement.task_type.replace(/_/g, ' ')}</strong></span>
           )}
-          {announcement.departments.length > 0 && (
+          {announcement.target_mode === 'users' ? (
+            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 font-semibold">
+              🎯 Assigned to you
+            </span>
+          ) : announcement.departments.length > 0 ? (
             <span>Dept: <strong className="text-gray-700 dark:text-gray-200">{announcement.departments.join(', ')}</strong></span>
-          )}
+          ) : null}
         </div>
       </div>
 

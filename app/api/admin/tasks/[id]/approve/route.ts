@@ -46,7 +46,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
   // Auto-grant the announcement reward when an announcement-sourced task is approved.
-  // Idempotent: skip if a user_awards row already exists for this task.
+  // Multi-accept: bonus_points is split equally among all CURRENTLY approved
+  // acceptances on this announcement. Each accepter's task gets floor(bonus/N)
+  // at its own approval time. Idempotent per (task, award_type).
   if (isApproved && data.source_announcement_id) {
     const { data: announcement } = await admin
       .from('announcements')
@@ -62,21 +64,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .eq('award_type_id', announcement.award_type_id)
 
       if ((existingCount ?? 0) === 0) {
-        // Derive month/year from the task's due_date (announcement-sourced tasks always have one).
+        // Count approved acceptances NOW — this is the split denominator.
+        const { count: approvedCount } = await admin
+          .from('announcement_acceptances')
+          .select('id', { count: 'exact', head: true })
+          .eq('announcement_id', announcement.id)
+          .eq('status', 'approved')
+
+        const n = Math.max(1, approvedCount ?? 1)
+        const sharedBonus = Math.floor(announcement.bonus_points / n)
+
         const due = data.due_date ? new Date(data.due_date + 'T00:00:00') : new Date()
+        const splitNote = n > 1
+          ? `Auto-granted from announcement: ${announcement.title} (split ${n} ways)`
+          : `Auto-granted from announcement: ${announcement.title}`
+
         const { error: awardErr } = await admin.from('user_awards').insert({
           user_id: data.user_id,
           award_type_id: announcement.award_type_id,
           task_id: id,
           awarded_by: announcement.created_by ?? user!.id,
-          bonus_points: announcement.bonus_points,
+          bonus_points: sharedBonus,
           month: due.getMonth() + 1,
           year: due.getFullYear(),
-          note: `Auto-granted from announcement: ${announcement.title}`,
+          note: splitNote,
         })
         if (awardErr) {
-          // Don't fail the approval if award insert fails — just log.
-          // The approval itself succeeded; award can be granted manually.
           console.error('Failed to auto-grant announcement award:', awardErr.message)
         }
       }

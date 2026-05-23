@@ -8,7 +8,9 @@ export const dynamic = 'force-dynamic'
 const createSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
-  departments: z.array(z.string().min(1)).min(1).max(20),
+  target_mode: z.enum(['department', 'users']).default('department'),
+  departments: z.array(z.string().min(1)).max(20).default([]),
+  user_ids: z.array(z.string().uuid()).max(200).default([]),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD'),
   priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   task_type: z.string().optional(),
@@ -17,6 +19,8 @@ const createSchema = z.object({
   award_type_id: z.string().uuid().nullable().optional(),
   bonus_points: z.number().int().min(0).max(10_000).default(0),
   score_weight: z.number().int().min(0).max(10_000).nullable().optional(),
+}).refine(d => d.target_mode === 'department' ? d.departments.length > 0 : d.user_ids.length > 0, {
+  message: 'Pick at least one department (department mode) or at least one user (user mode).',
 })
 
 export async function GET(req: NextRequest) {
@@ -75,7 +79,9 @@ export async function POST(req: NextRequest) {
     .insert({
       title: input.title,
       description: input.description ?? null,
-      departments: input.departments,
+      target_mode: input.target_mode,
+      departments: input.target_mode === 'department' ? input.departments : [],
+      user_ids: input.target_mode === 'users' ? input.user_ids : [],
       due_date: input.due_date,
       priority: input.priority,
       task_type: input.task_type ?? null,
@@ -93,21 +99,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
   }
 
-  // Notification fan-out (Q4): notify every active member whose department is in the target list.
-  const { data: targets } = await admin
-    .from('profiles')
-    .select('id')
-    .eq('is_active', true)
-    .neq('role', 'admin')
-    .in('department', input.departments)
+  // Notification fan-out: notify the targeted audience.
+  let targets: { id: string }[] = []
+  if (input.target_mode === 'department') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('is_active', true)
+      .neq('role', 'admin')
+      .in('department', input.departments)
+    targets = data ?? []
+  } else {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('is_active', true)
+      .in('id', input.user_ids)
+    targets = data ?? []
+  }
 
-  if (targets && targets.length > 0) {
+  if (targets.length > 0) {
     const link = `/announcements`
     const rows = targets.map(t => ({
       user_id: t.id,
       sender_id: profile!.id,
-      title: 'New announcement for your team',
-      body: `"${input.title}" — accept it to add to your tasks.`,
+      title: input.target_mode === 'users'
+        ? 'You were tagged on a new announcement'
+        : 'New announcement for your team',
+      body: `"${input.title}" — ${input.target_mode === 'users' ? 'accept it to add to your tasks.' : 'request to accept and the admin will approve finalists.'}`,
       link,
     }))
     await admin.from('notifications').insert(rows)

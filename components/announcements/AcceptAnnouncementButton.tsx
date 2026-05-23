@@ -9,8 +9,8 @@ interface Props {
   announcement: AnnouncementRow
   /** Size variant. `compact` is used on the dashboard widget. */
   size?: 'default' | 'compact'
-  /** Called after a successful accept (router refresh / list re-fetch). */
-  onAccepted?: (taskId: string) => void
+  /** Called after the server responds (approved → task created, requested → awaiting admin). */
+  onAccepted?: (result: { status: 'requested' | 'approved'; task_id: string | null }) => void
   /** Pass attachments already fetched at page-load (saves a round-trip). */
   preloadedAttachments?: AttachmentRow[]
 }

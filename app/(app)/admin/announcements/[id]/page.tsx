@@ -7,6 +7,7 @@ import RewardStrip from '@/components/announcements/RewardStrip'
 import ScreenshotGallery from '@/components/announcements/ScreenshotGallery'
 import { signMany } from '@/lib/attachments'
 import AnnouncementDeleteButton from '@/components/admin/AnnouncementDeleteButton'
+import AcceptanceRequestsPanel, { type AcceptanceRow } from '@/components/admin/AcceptanceRequestsPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,31 +25,56 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
   if (profile?.role !== 'admin') redirect('/dashboard')
 
   const admin = createAdminClient()
-  const [annRes, annAttRes] = await Promise.all([
+  const [annRes, annAttRes, acceptancesRes] = await Promise.all([
     admin.from('announcements').select('*, award_types(name, icon, bonus_points)').eq('id', id).single(),
     admin.from('announcement_attachments').select('id, file_name, storage_path').eq('announcement_id', id).order('created_at'),
+    admin
+      .from('announcement_acceptances')
+      .select('id, user_id, status, task_id, requested_at, approved_at')
+      .eq('announcement_id', id)
+      .order('requested_at', { ascending: true }),
   ])
   if (!annRes.data) notFound()
   const a = annRes.data
 
-  // Profile lookups for accepted_by + created_by
-  const profileIds = Array.from(new Set([a.accepted_by, a.created_by].filter(Boolean))) as string[]
+  // Profile lookups for accepters + creator
+  const accIds = (acceptancesRes.data ?? []).map(r => r.user_id)
+  const profileIds = Array.from(new Set([a.created_by, ...accIds].filter(Boolean))) as string[]
   const { data: profileRows } = await admin
     .from('profiles')
     .select('id, full_name, avatar_url, department')
     .in('id', profileIds)
   const pById = Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
+  const acceptances: AcceptanceRow[] = (acceptancesRes.data ?? []).map(r => ({
+    id: r.id,
+    user_id: r.user_id,
+    status: r.status,
+    task_id: r.task_id,
+    requested_at: r.requested_at,
+    approved_at: r.approved_at,
+    user: pById[r.user_id]
+      ? {
+          full_name: pById[r.user_id].full_name,
+          avatar_url: pById[r.user_id].avatar_url,
+          department: pById[r.user_id].department,
+        }
+      : null,
+  }))
+
   // Sign URLs for announcement attachments
   const annSigned = await signMany('announcement-attachments', (annAttRes.data ?? []).map(x => x.storage_path))
 
-  // Proof attachments on the linked task (if active)
+  // Proof attachments across all approved acceptance tasks
+  const approvedTaskIds = acceptances
+    .filter(r => r.status === 'approved' && r.task_id)
+    .map(r => r.task_id!) as string[]
   let proofItems: { id: string; file_name: string; viewUrl: string | null }[] = []
-  if (a.accepted_task_id) {
+  if (approvedTaskIds.length > 0) {
     const { data: proofRows } = await admin
       .from('task_attachments')
       .select('id, file_name, storage_path')
-      .eq('task_id', a.accepted_task_id)
+      .in('task_id', approvedTaskIds)
       .order('created_at')
     const taskSigned = await signMany('task-attachments', (proofRows ?? []).map(x => x.storage_path))
     proofItems = (proofRows ?? []).map(p => ({
@@ -58,16 +84,8 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
     }))
   }
 
-  // Task status if active
-  let taskStatus: string | null = null
-  if (a.accepted_task_id) {
-    const { data: t } = await admin.from('tasks').select('status').eq('id', a.accepted_task_id).single()
-    taskStatus = t?.status ?? null
-  }
-
   const award = (a as unknown as { award_types: { name: string; icon: string } | null }).award_types
   const taskPoints = a.score_weight ?? 0
-  const accepter = a.accepted_by ? pById[a.accepted_by] : null
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
@@ -131,43 +149,21 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
         </section>
       )}
 
-      {a.status === 'active' && accepter && (
+      {acceptances.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Accepted by</h2>
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              {accepter.avatar_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={accepter.avatar_url} alt={accepter.full_name} className="w-9 h-9 rounded-full object-cover" />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-bold flex items-center justify-center">
-                  {accepter.full_name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{accepter.full_name}</p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Accepted {a.accepted_at ? new Date(a.accepted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                  {taskStatus && <> · Task status: <span className="capitalize font-medium">{taskStatus.replace(/_/g, ' ')}</span></>}
-                </p>
-              </div>
-            </div>
-            {a.accepted_task_id && (
-              <Link
-                href={`/tasks/${a.accepted_task_id}`}
-                className="text-xs font-medium px-2.5 py-1 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Open task →
-              </Link>
-            )}
-          </div>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Acceptances</h2>
+          <AcceptanceRequestsPanel
+            announcementId={id}
+            acceptances={acceptances}
+            totalBonus={a.bonus_points ?? 0}
+          />
         </section>
       )}
 
       {proofItems.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Proof of success (uploaded by {accepter?.full_name ?? 'the assignee'} on the task)
+            Proof of success (across all approved accepters)
           </h2>
           <ScreenshotGallery items={proofItems} size="md" />
         </section>

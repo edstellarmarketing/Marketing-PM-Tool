@@ -21,7 +21,7 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
   const [announcementRes, awardsRes, profilesRes, categoriesRes, configsRes, attachmentsRes] = await Promise.all([
     admin.from('announcements').select('*').eq('id', id).single(),
     admin.from('award_types').select('id, name, icon, bonus_points').eq('is_active', true).order('name'),
-    admin.from('profiles').select('department').eq('is_active', true),
+    admin.from('profiles').select('id, full_name, department, role').eq('is_active', true).order('full_name'),
     admin.from('categories').select('name').order('name'),
     admin.from('point_config')
       .select('label, category')
@@ -37,9 +37,13 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
     redirect(`/admin/announcements/${id}`)
   }
 
+  const allProfiles = profilesRes.data ?? []
   const departments = Array.from(
-    new Set(((profilesRes.data ?? []).map(p => p.department?.trim()).filter(Boolean) as string[])),
+    new Set((allProfiles.map(p => p.department?.trim()).filter(Boolean) as string[])),
   ).sort()
+  const members = allProfiles
+    .filter(p => p.role !== 'admin')
+    .map(p => ({ id: p.id, full_name: p.full_name, department: p.department ?? null }))
   const taskTypes = (configsRes.data ?? []).filter(c => c.category === 'task_type').map(c => c.label)
   const complexities = (configsRes.data ?? []).filter(c => c.category === 'complexity').map(c => c.label)
   const categories = (categoriesRes.data ?? []).map(c => c.name).filter(Boolean)
@@ -67,7 +71,9 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
           id,
           title: announcementRes.data.title,
           description: announcementRes.data.description,
+          target_mode: announcementRes.data.target_mode ?? 'department',
           departments: announcementRes.data.departments,
+          user_ids: announcementRes.data.user_ids ?? [],
           due_date: announcementRes.data.due_date,
           priority: announcementRes.data.priority,
           task_type: announcementRes.data.task_type,
@@ -79,6 +85,7 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
         }}
         awards={awardsRes.data ?? []}
         departments={departments}
+        members={members}
         taskTypes={taskTypes}
         complexities={complexities}
         categories={categories}

@@ -13,11 +13,19 @@ interface AwardType {
   bonus_points: number
 }
 
+interface MemberOption {
+  id: string
+  full_name: string
+  department: string | null
+}
+
 interface InitialValues {
   id?: string
   title?: string
   description?: string | null
+  target_mode?: 'department' | 'users'
   departments?: string[]
+  user_ids?: string[]
   due_date?: string
   priority?: 'low' | 'medium' | 'high' | 'critical'
   task_type?: string | null
@@ -33,6 +41,7 @@ interface Props {
   initial?: InitialValues
   awards: AwardType[]
   departments: string[]                  // distinct values from profiles.department
+  members: MemberOption[]                // active non-admin members for user-targeting
   taskTypes?: string[]
   complexities?: string[]
   categories?: string[]
@@ -42,13 +51,16 @@ interface Props {
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const
 
 export default function AnnouncementForm({
-  mode, initial = {}, awards, departments, taskTypes = [], complexities = [], categories = [],
+  mode, initial = {}, awards, departments, members, taskTypes = [], complexities = [], categories = [],
   preloadedAttachments,
 }: Props) {
   const router = useRouter()
   const [title, setTitle] = useState(initial.title ?? '')
   const [description, setDescription] = useState(initial.description ?? '')
+  const [targetMode, setTargetMode] = useState<'department' | 'users'>(initial.target_mode ?? 'department')
   const [selectedDepts, setSelectedDepts] = useState<string[]>(initial.departments ?? [])
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(initial.user_ids ?? [])
+  const [memberFilter, setMemberFilter] = useState('')
   const [dueDate, setDueDate] = useState(initial.due_date ?? '')
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>(initial.priority ?? 'medium')
   const [taskType, setTaskType] = useState(initial.task_type ?? '')
@@ -78,11 +90,29 @@ export default function AnnouncementForm({
     setSelectedDepts(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
   }
 
+  function toggleUser(uid: string) {
+    setSelectedUserIds(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid])
+  }
+
+  const filteredMembers = useMemo(() => {
+    const q = memberFilter.trim().toLowerCase()
+    if (!q) return members
+    return members.filter(m =>
+      m.full_name.toLowerCase().includes(q)
+      || (m.department ?? '').toLowerCase().includes(q),
+    )
+  }, [members, memberFilter])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     if (!title.trim()) return setError('Title is required.')
-    if (selectedDepts.length === 0) return setError('Pick at least one department.')
+    if (targetMode === 'department' && selectedDepts.length === 0) {
+      return setError('Pick at least one department.')
+    }
+    if (targetMode === 'users' && selectedUserIds.length === 0) {
+      return setError('Pick at least one user.')
+    }
     if (!dueDate) return setError('Due date is required.')
     if (bonus > 0 && !awardId) {
       return setError('Pick an award type when bonus points are greater than 0.')
@@ -93,7 +123,9 @@ export default function AnnouncementForm({
       const payload = {
         title: title.trim(),
         description: description.trim() || undefined,
-        departments: selectedDepts,
+        target_mode: targetMode,
+        departments: targetMode === 'department' ? selectedDepts : [],
+        user_ids: targetMode === 'users' ? selectedUserIds : [],
         due_date: dueDate,
         priority,
         task_type: taskType || undefined,
@@ -173,30 +205,103 @@ export default function AnnouncementForm({
           />
         </Field>
 
-        <Field label="Departments *  (one or more)">
-          {departments.length === 0 ? (
-            <p className="text-xs text-gray-500 dark:text-gray-400">No departments found on any active profile.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {departments.map(d => {
-                const active = selectedDepts.includes(d)
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => toggleDept(d)}
-                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                      active
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
+        <Field label="Target *">
+          <div className="space-y-3">
+            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 text-sm">
+              <button
+                type="button"
+                onClick={() => setTargetMode('department')}
+                className={`px-3 py-1.5 ${targetMode === 'department' ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+              >
+                By Department
+              </button>
+              <button
+                type="button"
+                onClick={() => setTargetMode('users')}
+                className={`px-3 py-1.5 ${targetMode === 'users' ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+              >
+                By Specific Users
+              </button>
             </div>
-          )}
+
+            {targetMode === 'department' ? (
+              departments.length === 0 ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400">No departments found on any active profile.</p>
+              ) : (
+                <>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Pick one or more departments. Anyone in those departments will see the announcement and can <em>request</em> to accept. You then approve finalists from the announcement detail page.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {departments.map(d => {
+                      const active = selectedDepts.includes(d)
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => toggleDept(d)}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            active
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )
+            ) : (
+              members.length === 0 ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400">No active members to target.</p>
+              ) : (
+                <>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Pick one or more users. Only they will see the announcement, and each can accept directly — no admin approval gate. Bonus points are split equally among accepters.
+                  </p>
+                  <input
+                    type="text"
+                    value={memberFilter}
+                    onChange={e => setMemberFilter(e.target.value)}
+                    placeholder="Search members…"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                    {filteredMembers.length === 0 ? (
+                      <p className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">No matches.</p>
+                    ) : filteredMembers.map(m => {
+                      const active = selectedUserIds.includes(m.id)
+                      return (
+                        <label
+                          key={m.id}
+                          className={`flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer ${active ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                        >
+                          <span className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleUser(m.id)}
+                            />
+                            <span className="text-gray-900 dark:text-white">{m.full_name}</span>
+                          </span>
+                          {m.department && (
+                            <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400">{m.department}</span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {selectedUserIds.length > 0 && (
+                    <p className="text-[11px] text-gray-600 dark:text-gray-300">
+                      {selectedUserIds.length} user{selectedUserIds.length === 1 ? '' : 's'} selected.
+                    </p>
+                  )}
+                </>
+              )
+            )}
+          </div>
         </Field>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

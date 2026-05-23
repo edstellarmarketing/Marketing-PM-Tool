@@ -8,7 +8,12 @@ export const dynamic = 'force-dynamic'
 const patchSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).nullable().optional(),
-  departments: z.array(z.string().min(1)).min(1).max(20).optional(),
+  target_mode: z.enum(['department', 'users']).optional(),
+  // Allow empty array when caller switches to user-targeting (and vice versa).
+  // The DB CHECK constraint announcements_target_populated_check still enforces
+  // that the active side is non-empty for whatever target_mode the row ends up in.
+  departments: z.array(z.string().min(1)).max(20).optional(),
+  user_ids: z.array(z.string().uuid()).max(200).optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   task_type: z.string().nullable().optional(),

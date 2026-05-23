@@ -11,7 +11,9 @@ export interface AnnouncementRow {
   id: string
   title: string
   description: string | null
+  target_mode: 'department' | 'users'
   departments: string[]
+  user_ids: string[]
   due_date: string
   priority: 'low' | 'medium' | 'high' | 'critical'
   task_type: string | null
