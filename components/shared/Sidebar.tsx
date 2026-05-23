@@ -151,8 +151,8 @@ export default function Sidebar({ role, fullName, designation, avatarUrl }: Side
         <SidebarContent />
       </aside>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 min-h-screen bg-gray-900 text-white flex-col flex-shrink-0">
+      {/* Desktop sidebar — sticky so a tall right-side page doesn't push Sign out below the viewport */}
+      <aside className="hidden md:flex w-60 sticky top-0 h-screen bg-gray-900 text-white flex-col flex-shrink-0 self-start">
         <SidebarContent />
       </aside>
     </>
