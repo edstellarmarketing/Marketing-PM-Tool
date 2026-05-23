@@ -17,6 +17,7 @@ const rowSchema = z.object({
   dependency_owner_id: z.string().uuid().nullable().optional(),
   dependency_owner_ids: z.array(z.string().uuid()).max(50).nullable().optional(),
   final_comments: z.string().max(4000).nullable().optional(),
+  sort_order: z.number().int().min(0).max(1_000_000).nullable().optional(),
 })
 
 const bodySchema = z.object({
@@ -44,7 +45,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid owner for this project' }, { status: 400 })
   }
 
-  const inserts = parsed.data.rows.map(r => ({
+  // Bulk uploads append after the project's existing tasks: assign each incoming row a
+  // monotonically increasing sort_order starting at MAX(existing) + 1, preserving the
+  // order the client sent (which is already sorted by the S.No column in the file).
+  const { data: maxRow } = await supabase
+    .from('project_tasks')
+    .select('sort_order')
+    .eq('project_id', projectId)
+    .order('sort_order', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+  const baseSortOrder = maxRow?.sort_order ?? 0
+
+  const inserts = parsed.data.rows.map((r, i) => ({
     project_id: projectId,
     owner_id: owner.id,
     title: r.title,
@@ -61,6 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     dependency_owner_id: r.dependency_owner_ids?.[0] ?? r.dependency_owner_id ?? null,
     dependency_owner_ids: r.dependency_owner_ids?.length ? r.dependency_owner_ids : null,
     final_comments: r.final_comments ?? null,
+    sort_order: baseSortOrder + i + 1,
     created_by: user.id,
   }))
 

@@ -296,6 +296,7 @@ export interface ProjectTask {
   dependency_owner_id: string | null
   dependency_owner_ids?: string[] | null
   final_comments: string | null
+  sort_order: number | null
   created_by: string
   created_at: string
   updated_at: string

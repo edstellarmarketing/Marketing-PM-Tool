@@ -21,7 +21,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   if (!project) notFound()
 
   const [tasksRes, ownersRes, membersRes, allMembersRes] = await Promise.all([
-    supabase.from('project_tasks').select('*').eq('project_id', id).order('created_at', { ascending: false }),
+    supabase.from('project_tasks').select('*').eq('project_id', id).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true }),
     supabase.from('project_owners').select('*').eq('project_id', id).order('created_at', { ascending: true }),
     supabase.from('project_owner_members').select('*'),
     supabase.from('profiles').select('id, full_name, avatar_url').order('full_name', { ascending: true }),

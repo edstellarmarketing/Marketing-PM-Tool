@@ -40,6 +40,7 @@ export async function GET() {
 
   // ── Sheet 1: Tasks ──────────────────────────────────────────────────────────
   const headers = [
+    'S.No',
     'Title', 'Description', 'Status', 'Priority', 'Progress',
     'Start Date', 'Due Date',
     'Dependency Task', 'Dependency Details', 'Dependency Status', 'Dependency Owner',
@@ -47,6 +48,7 @@ export async function GET() {
   ]
   const sampleRows: (string | number)[][] = [
     [
+      1,
       'Header design',
       'Build the responsive site header with sticky navigation',
       'In Progress', 'High', 40, '6/1/2026', '6/15/2026',
@@ -56,12 +58,14 @@ export async function GET() {
       'Awaiting brand sign-off; once approved, can wrap in a day.',
     ],
     [
+      2,
       'Footer revamp',
       'Replace legacy footer with the new component',
       'Pending', 'Medium', 0, '6/10/2026', '6/20/2026',
       '', '', '', '', '',
     ],
     [
+      3,
       'Homepage hero animation',
       'Implement scroll-triggered hero section',
       'Pending', 'High', 0, '6/12/2026', '6/22/2026',
@@ -71,12 +75,14 @@ export async function GET() {
       'Blocked until content team finalises copy.',
     ],
     [
+      4,
       'SEO audit fixes',
       'Apply remediations from the Q2 SEO audit',
       'Completed', 'Medium', 100, '5/20/2026', '5/30/2026',
       '', '', '', '', 'Done — all audit items addressed.',
     ],
     [
+      5,
       'Form validation refactor',
       'Move all forms to react-hook-form + zod',
       'In Progress', 'Critical', 65, '5/28/2026', '6/10/2026',
@@ -86,6 +92,7 @@ export async function GET() {
       'Frontend pieces done; integration paused on backend contract.',
     ],
     [
+      6,
       'Sitemap & robots.txt',
       'Generate and ship the production sitemap and robots',
       'Pending', 'Low', 0, '6/15/2026', '6/25/2026',
@@ -95,6 +102,7 @@ export async function GET() {
   const tasksSheet = XLSX.utils.aoa_to_sheet([headers, ...sampleRows])
   // Column widths roughly matched to content length
   tasksSheet['!cols'] = [
+    { wch: 6 },  // S.No
     { wch: 28 }, // Title
     { wch: 60 }, // Description
     { wch: 13 }, // Status
@@ -122,6 +130,7 @@ export async function GET() {
     [''],
     ['IMPORTANT'],
     ['• Only the "Title" column is required. Every other column is optional.'],
+    ['• "S.No" controls the order tasks appear in the project. Lowest number shows first. Leave it blank to use the row order in the file.'],
     ['• Dates can be MM/DD/YYYY (US) or YYYY-MM-DD. Excel date cells are also accepted.'],
     ['• Progress must be a whole number between 0 and 100.'],
     ['• If a row has any Dependency fields filled, "Dependency Task" must be set.'],
@@ -132,18 +141,19 @@ export async function GET() {
     ['INSTRUCTIONS PER COLUMN'],
     ['Field',                              'Required?', 'What to enter',                                                                                                  'If left blank'],
 
-    ['A. Title',                           'Yes',       'A short task name (preferably under 80 chars). This is how the row appears in the upload preview.',              'Row is skipped and shown as invalid in the preview.'],
-    ['B. Description',                     'No',        'Free-text details / context. Newlines are preserved.',                                                            'No description on the imported task.'],
-    ['C. Status',                          'No',        'One of: Pending / In Progress / Completed (see Reference tab for synonyms).',                                     'Defaults to Pending.'],
-    ['D. Priority',                        'No',        'One of: Low / Medium / High / Critical.',                                                                         'Defaults to Medium.'],
-    ['E. Progress',                        'No',        'Whole number 0 to 100.',                                                                                          'Treated as 0. Auto-set to 100 if Status = Completed.'],
-    ['F. Start Date',                      'No',        'When work begins. MM/DD/YYYY or YYYY-MM-DD or an Excel date cell.',                                               'No start date set.'],
-    ['G. Due Date',                        'No (rec.)', 'Deadline. Same date formats as Start Date. Recommended for reporting.',                                           'Task is un-dated; reports treat it as having no deadline.'],
-    ['H. Dependency Task',                 'See note',  'Name of the upstream/blocking task. Required if ANY of I, J, or K below is filled.',                              'No dependency recorded on the task.'],
-    ['I. Dependency Details',              'No',        'Why the dependency blocks. Free-text. Only meaningful if H is set.',                                              'No detail; the dependency exists but with no extra context.'],
-    ['J. Dependency Status',               'No',        'One of: Pending / In Progress / In Review / Completed / Blocked.',                                                'Defaults to Pending. Only meaningful if H is set.'],
-    ['K. Dependency Owner',                'No',        'Full name(s) of an active user. Single name or comma-separated for joint ownership. See Reference tab for the live list of valid names.', 'No owner attached. Unmatched names are flagged in the preview.'],
-    ['L. Final Comments',                  'No',        'Wrap-up note added when the task closes. Often filled in when Status = Completed.',                               'No closing note on the imported task.'],
+    ['A. S.No',                            'No (rec.)', 'Whole number controlling the order of the tasks in the project (e.g. 1, 2, 3 …). Lowest number appears first.',  'Falls back to the row order in the file.'],
+    ['B. Title',                           'Yes',       'A short task name (preferably under 80 chars). This is how the row appears in the upload preview.',              'Row is skipped and shown as invalid in the preview.'],
+    ['C. Description',                     'No',        'Free-text details / context. Newlines are preserved.',                                                            'No description on the imported task.'],
+    ['D. Status',                          'No',        'One of: Pending / In Progress / Completed (see Reference tab for synonyms).',                                     'Defaults to Pending.'],
+    ['E. Priority',                        'No',        'One of: Low / Medium / High / Critical.',                                                                         'Defaults to Medium.'],
+    ['F. Progress',                        'No',        'Whole number 0 to 100.',                                                                                          'Treated as 0. Auto-set to 100 if Status = Completed.'],
+    ['G. Start Date',                      'No',        'When work begins. MM/DD/YYYY or YYYY-MM-DD or an Excel date cell.',                                               'No start date set.'],
+    ['H. Due Date',                        'No (rec.)', 'Deadline. Same date formats as Start Date. Recommended for reporting.',                                           'Task is un-dated; reports treat it as having no deadline.'],
+    ['I. Dependency Task',                 'See note',  'Name of the upstream/blocking task. Required if ANY of J, K, or L below is filled.',                              'No dependency recorded on the task.'],
+    ['J. Dependency Details',              'No',        'Why the dependency blocks. Free-text. Only meaningful if I is set.',                                              'No detail; the dependency exists but with no extra context.'],
+    ['K. Dependency Status',               'No',        'One of: Pending / In Progress / In Review / Completed / Blocked.',                                                'Defaults to Pending. Only meaningful if I is set.'],
+    ['L. Dependency Owner',                'No',        'Full name(s) of an active user. Single name or comma-separated for joint ownership. See Reference tab for the live list of valid names.', 'No owner attached. Unmatched names are flagged in the preview.'],
+    ['M. Final Comments',                  'No',        'Wrap-up note added when the task closes. Often filled in when Status = Completed.',                               'No closing note on the imported task.'],
     [''],
 
     ['NEED MORE DETAIL?'],
@@ -167,7 +177,15 @@ export async function GET() {
     ['Use this tab when filling in the Tasks sheet. Sections appear in the same column order.'],
     [''],
 
-    ['─── A. TITLE  (required, free text) ───'],
+    ['─── A. S.No  (optional, integer — recommended for ordering) ───'],
+    ['Guidance',  'Notes'],
+    ['Purpose',   'Controls the display order of tasks in the project. Lowest number shows first.'],
+    ['Format',    'Whole number (1, 2, 3 …). Decimals are rounded down.'],
+    ['Blank',     'Falls back to the row order in the spreadsheet.'],
+    ['Tip',       'Numbering does not have to start at 1; the imported batch is appended after any existing tasks, and the relative order between rows is what matters.'],
+    [''],
+
+    ['─── B. TITLE  (required, free text) ───'],
     ['Guidance',  'Notes'],
     ['Short',     'Aim for under 80 characters. Title is the row identifier in the preview.'],
     ['Action verb', 'Start with a verb where natural — "Build homepage hero", "Refactor login flow".'],
@@ -178,7 +196,7 @@ export async function GET() {
     ['',          'SEO audit fixes'],
     [''],
 
-    ['─── B. DESCRIPTION  (optional, free text) ───'],
+    ['─── C. DESCRIPTION  (optional, free text) ───'],
     ['Guidance',  'Notes'],
     ['Multi-line', 'Newlines are preserved on import. Use them for sub-bullets or context.'],
     ['Length',    'No hard cap, but the preview truncates very long values for readability.'],
@@ -187,14 +205,14 @@ export async function GET() {
     ['',          'Move all forms to react-hook-form + zod'],
     [''],
 
-    ['─── C. STATUS  (optional enum, defaults to "Pending") ───'],
+    ['─── D. STATUS  (optional enum, defaults to "Pending") ───'],
     ['Value',          'Notes / Synonyms accepted on import'],
     ['Pending',        'Default. Synonyms: Not Started, To Do, Open, Backlog.'],
     ['In Progress',    'Work is underway. Synonyms: WIP, In-Progress, Working, Doing.'],
     ['Completed',      'Done. Synonyms: Done, Closed, Finished, Shipped.'],
     [''],
 
-    ['─── D. PRIORITY  (optional enum, defaults to "Medium") ───'],
+    ['─── E. PRIORITY  (optional enum, defaults to "Medium") ───'],
     ['Value',          'Notes'],
     ['Low',            'Nice-to-have / low impact.'],
     ['Medium',         'Default if left blank.'],
@@ -202,7 +220,7 @@ export async function GET() {
     ['Critical',       'Highest urgency — blocks releases or revenue.'],
     [''],
 
-    ['─── E. PROGRESS  (optional integer, 0–100) ───'],
+    ['─── F. PROGRESS  (optional integer, 0–100) ───'],
     ['Value',          'Notes'],
     ['0',              'Not started. Use with Status = Pending.'],
     ['1 to 99',        'In flight. Whole numbers only. Decimals are rounded down.'],
@@ -210,7 +228,7 @@ export async function GET() {
     ['Blank',          'Treated as 0.'],
     [''],
 
-    ['─── F. START DATE  (optional, date) ───'],
+    ['─── G. START DATE  (optional, date) ───'],
     ['Format',         'Example'],
     ['US slash',       '6/15/2026'],
     ['ISO',            '2026-06-15'],
@@ -219,7 +237,7 @@ export async function GET() {
     ['Rule',           'Must be on or before Due Date if both are set.'],
     [''],
 
-    ['─── G. DUE DATE  (optional, date — recommended) ───'],
+    ['─── H. DUE DATE  (optional, date — recommended) ───'],
     ['Format',         'Example'],
     ['US slash',       '6/30/2026'],
     ['ISO',            '2026-06-30'],
@@ -227,18 +245,18 @@ export async function GET() {
     ['Blank',          'No deadline shown on the task row. Reporting will treat it as un-dated.'],
     [''],
 
-    ['─── H. DEPENDENCY TASK  (optional, free text) ───'],
+    ['─── I. DEPENDENCY TASK  (optional, free text) ───'],
     ['Guidance',  'Notes'],
     ['Format',    'Plain task name. Doesn\'t need to exactly match another row\'s Title.'],
     ['When to use', 'Whenever this task is blocked or waiting on another piece of work.'],
-    ['Rule',      'If ANY of columns I, J, or K is filled, column H must also be filled.'],
+    ['Rule',      'If ANY of columns J, K, or L is filled, column I must also be filled.'],
     ['Examples',  ''],
     ['',          'Brand guidelines sign-off'],
     ['',          'API error contract'],
     ['',          'Hero copy approval'],
     [''],
 
-    ['─── I. DEPENDENCY DETAILS  (optional, free text) ───'],
+    ['─── J. DEPENDENCY DETAILS  (optional, free text) ───'],
     ['Guidance',  'Notes'],
     ['Purpose',   'Explain what you\'re waiting for and why it blocks.'],
     ['Examples',  ''],
@@ -247,7 +265,7 @@ export async function GET() {
     ['',          'Awaiting final hero copy from content team'],
     [''],
 
-    ['─── J. DEPENDENCY STATUS  (optional enum) ───'],
+    ['─── K. DEPENDENCY STATUS  (optional enum) ───'],
     ['Value',          'Notes'],
     ['Pending',        'Hasn\'t started.'],
     ['In Progress',    'Owner is working on it.'],
@@ -256,7 +274,7 @@ export async function GET() {
     ['Blocked',        'The dependency itself is blocked.'],
     [''],
 
-    ['─── K. DEPENDENCY OWNER  (optional, matches an active user\'s full name) ───'],
+    ['─── L. DEPENDENCY OWNER  (optional, matches an active user\'s full name) ───'],
     ['Format',         'Notes'],
     ['Single',         `One active user's full name — e.g. "${sampleOwner1}".`],
     ['Multiple',       `Comma-separated for joint ownership — e.g. "${samplePair}".`],
@@ -270,7 +288,7 @@ export async function GET() {
     ['Tip',            'This list is generated live from the database at download time. Re-download the template if a new member joins.'],
     [''],
 
-    ['─── L. FINAL COMMENTS  (optional, free text) ───'],
+    ['─── M. FINAL COMMENTS  (optional, free text) ───'],
     ['Guidance',  'Notes'],
     ['When to use', 'Wrap-up note. Often filled in when Status = Completed.'],
     ['Examples',  ''],

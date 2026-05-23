@@ -30,10 +30,13 @@ interface MappedRow {
   _depOwnerNames?: string[]
   _depOwnerUnmatched?: string[]
   final_comments: string | null
+  sort_order: number | null
+  _rowIndex: number
   _error?: string
 }
 
 const FIELD_KEYS = [
+  'sort_order',
   'title', 'description', 'status', 'priority', 'progress', 'start_date', 'due_date',
   'dependency_task', 'dependency_details', 'dependency_status', 'dependency_owner',
   'final_comments',
@@ -41,6 +44,7 @@ const FIELD_KEYS = [
 type FieldKey = typeof FIELD_KEYS[number]
 
 const FIELD_LABELS: Record<FieldKey, string> = {
+  sort_order: 'S.No (order)',
   title: 'Title (required)',
   description: 'Description',
   status: 'Status',
@@ -57,6 +61,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
 
 // Common header variants → canonical field
 const HEADER_HINTS: Record<FieldKey, string[]> = {
+  sort_order: ['s.no', 's no', 'sno', 'sl no', 'sl.no', 'sr no', 'sr.no', 'serial', 'serial no', 'serial number', '#', 'order', 'sort order', 'position', 'seq', 'sequence'],
   title: ['task name', 'task', 'title', 'name'],
   description: ['description', 'comments', 'notes', 'note', 'details', 'referance links', 'reference links', 'reference', 'url', 'link', 'page type'],
   status: ['status'],
@@ -77,6 +82,7 @@ function normaliseHeader(h: string) {
 
 function autoMap(headers: string[]): Record<FieldKey, string | null> {
   const out: Record<FieldKey, string | null> = {
+    sort_order: null,
     title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
@@ -105,6 +111,13 @@ function parsePriority(raw: unknown): MappedRow['priority'] {
   if (s === 'high' || s === 'p1') return 'high'
   if (s === 'low' || s === 'p3') return 'low'
   return 'medium'
+}
+
+function parseSortOrder(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[^\d.-]/g, ''))
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.floor(n))
 }
 
 function parseProgress(raw: unknown): number {
@@ -157,6 +170,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>({
+    sort_order: null,
     title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
@@ -208,7 +222,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const mappedRows = useMemo<MappedRow[]>(() => {
     if (!mapping.title) return []
     const mappedColumns = new Set(
-      [mapping.title, mapping.description, mapping.status, mapping.priority,
+      [mapping.sort_order, mapping.title, mapping.description, mapping.status, mapping.priority,
         mapping.progress, mapping.start_date, mapping.due_date,
         mapping.dependency_task, mapping.dependency_details, mapping.dependency_status, mapping.dependency_owner,
         mapping.final_comments]
@@ -258,6 +272,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       }
       const dependency_owner_ids = resolvedIds
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
+      const sort_order = mapping.sort_order ? parseSortOrder(row[mapping.sort_order]) : null
 
       const err = !title ? 'Title is empty' : undefined
 
@@ -267,13 +282,31 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         _depOwnerNames: rawNames,
         _depOwnerUnmatched: unmatched,
         final_comments,
+        sort_order,
+        _rowIndex: rowIndex,
         _error: err,
       }
     })
   }, [rawRows, mapping, allMembers, depOwnerOverrides])
 
   const validRows = useMemo(() => mappedRows.filter(r => !r._error), [mappedRows])
-  const importable = useMemo(() => mappedRows.filter(r => r.title), [mappedRows])
+  // Sort by S.No (ascending) so the bulk insert order matches the user's intent.
+  // Rows without an explicit S.No keep their file order via `_rowIndex` as a tiebreaker;
+  // they sort after any rows that did provide one.
+  const importable = useMemo(() => {
+    const rows = mappedRows.filter(r => r.title)
+    return [...rows].sort((a, b) => {
+      const aHas = a.sort_order !== null
+      const bHas = b.sort_order !== null
+      if (aHas && bHas) {
+        if (a.sort_order! !== b.sort_order!) return a.sort_order! - b.sort_order!
+        return a._rowIndex - b._rowIndex
+      }
+      if (aHas) return -1
+      if (bHas) return 1
+      return a._rowIndex - b._rowIndex
+    })
+  }, [mappedRows])
   const blockedCount = mappedRows.length - importable.length
 
   async function handleImport() {
@@ -284,6 +317,9 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        // `rows` is already sorted by S.No (with file order as the tiebreaker), so the
+        // server only has to insert in array order — the offset against the project's
+        // existing MAX(sort_order) is applied server-side.
         rows: importable.map(r => ({
           title: r.title,
           description: r.description,
@@ -297,6 +333,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
           dependency_status: r.dependency_status,
           dependency_owner_ids: r.dependency_owner_ids.length > 0 ? r.dependency_owner_ids : null,
           final_comments: r.final_comments,
+          sort_order: r.sort_order,
         })),
       }),
     })
@@ -410,6 +447,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                     <tr className="text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      <th className="px-2 py-1.5 font-medium">S.No</th>
                       <th className="px-2 py-1.5 font-medium">Title</th>
                       <th className="px-2 py-1.5 font-medium">Status</th>
                       <th className="px-2 py-1.5 font-medium">Priority</th>
@@ -431,6 +469,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                       const hasUnmatched = unmatched.length > 0
                       return (
                         <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.sort_order ?? <span className="text-gray-400" title="No S.No in the file — will fall back to row order">{i + 1}*</span>}</td>
                           <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>

@@ -42,6 +42,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid owner for this project' }, { status: 400 })
   }
 
+  // Newly-created tasks land at the end of the project's order.
+  const { data: maxRow } = await supabase
+    .from('project_tasks')
+    .select('sort_order')
+    .eq('project_id', projectId)
+    .order('sort_order', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+  const nextSortOrder = (maxRow?.sort_order ?? 0) + 1
+
   const { data, error: dbError } = await supabase
     .from('project_tasks')
     .insert({
@@ -61,6 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       dependency_owner_id: parsed.data.dependency_owner_ids?.[0] ?? parsed.data.dependency_owner_id ?? null,
       dependency_owner_ids: parsed.data.dependency_owner_ids?.length ? parsed.data.dependency_owner_ids : null,
       final_comments: parsed.data.final_comments ?? null,
+      sort_order: nextSortOrder,
       created_by: user.id,
     })
     .select()
