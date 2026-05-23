@@ -45,6 +45,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
+  // Auto-grant the announcement reward when an announcement-sourced task is approved.
+  // Idempotent: skip if a user_awards row already exists for this task.
+  if (isApproved && data.source_announcement_id) {
+    const { data: announcement } = await admin
+      .from('announcements')
+      .select('id, title, award_type_id, bonus_points, created_by')
+      .eq('id', data.source_announcement_id)
+      .single()
+
+    if (announcement?.award_type_id && (announcement.bonus_points ?? 0) > 0) {
+      const { count: existingCount } = await admin
+        .from('user_awards')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', id)
+        .eq('award_type_id', announcement.award_type_id)
+
+      if ((existingCount ?? 0) === 0) {
+        // Derive month/year from the task's due_date (announcement-sourced tasks always have one).
+        const due = data.due_date ? new Date(data.due_date + 'T00:00:00') : new Date()
+        const { error: awardErr } = await admin.from('user_awards').insert({
+          user_id: data.user_id,
+          award_type_id: announcement.award_type_id,
+          task_id: id,
+          awarded_by: announcement.created_by ?? user!.id,
+          bonus_points: announcement.bonus_points,
+          month: due.getMonth() + 1,
+          year: due.getFullYear(),
+          note: `Auto-granted from announcement: ${announcement.title}`,
+        })
+        if (awardErr) {
+          // Don't fail the approval if award insert fails — just log.
+          // The approval itself succeeded; award can be granted manually.
+          console.error('Failed to auto-grant announcement award:', awardErr.message)
+        }
+      }
+    }
+  }
+
   const actionLabel = isApproved ? 'score confirmed' : 'completion rejected'
   await admin.from('notifications').insert({
     user_id: data.user_id,

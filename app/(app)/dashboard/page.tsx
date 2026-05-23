@@ -11,6 +11,7 @@ import DashboardTaskTable from '@/components/admin/DashboardTaskTable'
 import DashboardClosedTaskTable from '@/components/admin/DashboardClosedTaskTable'
 import UserInsightsPanel from '@/components/dashboard/UserInsightsPanel'
 import UserStatCard from '@/components/dashboard/UserStatCard'
+import DashboardAnnouncementsWidget from '@/components/announcements/DashboardAnnouncementsWidget'
 import type { Task, MonthlyScore, UserAward } from '@/types'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -224,6 +225,9 @@ export default async function DashboardPage({ searchParams }: Props) {
           <Plus size={16} /> New Task
         </Link>
       </div>
+
+      {/* Announcements for this member's department (renders null if none) */}
+      <DashboardAnnouncementsWidget userId={user!.id} />
 
       {/* Stat cards — each expands to show associated tasks */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">

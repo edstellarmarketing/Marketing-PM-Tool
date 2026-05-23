@@ -35,6 +35,26 @@ export default async function TasksPage({ searchParams }: Props) {
   const profileMap: Record<string, { full_name: string; avatar_url: string | null; designation: string | null }> =
     Object.fromEntries((profiles ?? []).map(p => [p.id, p]))
 
+  // Fetch reward info for any tasks that came from an announcement.
+  const sourceIds = Array.from(
+    new Set(((tasks ?? []).map(t => t.source_announcement_id).filter(Boolean) as string[])),
+  )
+  type RewardInfo = { awardName: string | null; awardIcon: string | null; bonusPoints: number }
+  const rewardMap: Record<string, RewardInfo> = {}
+  if (sourceIds.length > 0) {
+    const { data: anns } = await adminClient
+      .from('announcements')
+      .select('id, bonus_points, award_types(name, icon)')
+      .in('id', sourceIds)
+    for (const row of (anns ?? []) as unknown as Array<{ id: string; bonus_points: number; award_types: { name: string; icon: string } | null }>) {
+      rewardMap[row.id] = {
+        awardName: row.award_types?.name ?? null,
+        awardIcon: row.award_types?.icon ?? null,
+        bonusPoints: row.bonus_points,
+      }
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -56,6 +76,7 @@ export default async function TasksPage({ searchParams }: Props) {
         isAdmin={isAdmin}
         currentUserId={user!.id}
         profileMap={profileMap}
+        announcementRewardMap={rewardMap}
       />
     </div>
   )

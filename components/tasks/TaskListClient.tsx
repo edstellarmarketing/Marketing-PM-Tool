@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn, formatDate, isOverdue, stripHtml } from '@/lib/utils'
 import { Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, ExternalLink, Search, X, Zap, Info, Link as LinkIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Task } from '@/types'
+import AnnouncementRewardBadge, { AnnouncementRibbon } from '@/components/announcements/AnnouncementRewardBadge'
 
 const PAGE_SIZES = [10, 25, 50]
 
@@ -80,11 +81,19 @@ interface ProfileInfo {
   designation: string | null
 }
 
+export interface AnnouncementRewardMapEntry {
+  awardName: string | null
+  awardIcon: string | null
+  bonusPoints: number
+}
+
 interface Props {
   initialTasks: Task[]
   isAdmin?: boolean
   currentUserId?: string
   profileMap?: Record<string, ProfileInfo>
+  /** Keyed by source_announcement_id; non-empty rows render the gold ribbon + badge. */
+  announcementRewardMap?: Record<string, AnnouncementRewardMapEntry>
 }
 
 function OwnerCell({ userId, profileMap }: { userId: string; profileMap: Record<string, ProfileInfo> }) {
@@ -129,7 +138,7 @@ function ScoreCell({ task }: { task: Task }) {
   )
 }
 
-export default function TaskListClient({ initialTasks, isAdmin, currentUserId, profileMap = {} }: Props) {
+export default function TaskListClient({ initialTasks, isAdmin, currentUserId, profileMap = {}, announcementRewardMap = {} }: Props) {
   const [tasks, setTasks] = useState(initialTasks)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -282,20 +291,25 @@ export default function TaskListClient({ initialTasks, isAdmin, currentUserId, p
     const isExpanded = expanded.has(task.id)
     const approval   = approvalCell(task)
     const doneAndConfirmed = task.status === 'done' && task.approval_status === 'approved'
+    const reward = task.source_announcement_id ? announcementRewardMap[task.source_announcement_id] : null
+    const fromAnnouncement = !!reward
 
     return (
       <tr
         key={task.id}
         className={cn(
-          'transition-colors',
+          'transition-colors relative',
           isChild
             ? 'bg-purple-50/40 hover:bg-purple-50/70'
-            : 'hover:bg-gray-50'
+            : fromAnnouncement
+              ? 'bg-amber-50/30 hover:bg-amber-50/60'
+              : 'hover:bg-gray-50'
         )}
       >
         {/* Task title */}
-        <td className={cn('py-3 px-4', isChild ? 'max-w-xs' : 'max-w-xs')}>
-          <div className={cn('flex items-start gap-2', isChild && 'pl-6 relative')}>
+        <td className={cn('py-3 px-4 relative', isChild ? 'max-w-xs' : 'max-w-xs')}>
+          {fromAnnouncement && <AnnouncementRibbon />}
+          <div className={cn('flex items-start gap-2', isChild && 'pl-6 relative', fromAnnouncement && 'pl-3')}>
             {/* Tree connector line for child rows */}
             {isChild && (
               <div className="absolute left-0 top-0 bottom-0 flex flex-col items-center w-5 pointer-events-none select-none">
@@ -357,6 +371,19 @@ export default function TaskListClient({ initialTasks, isAdmin, currentUserId, p
 
               {task.description && (
                 <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{stripHtml(task.description)}</p>
+              )}
+              {reward && (
+                <div className="mt-1">
+                  <AnnouncementRewardBadge
+                    reward={{
+                      awardName: reward.awardName,
+                      awardIcon: reward.awardIcon,
+                      bonusPoints: reward.bonusPoints,
+                      taskPoints: task.score_weight ?? 0,
+                      status: doneAndConfirmed ? 'granted' : 'pending',
+                    }}
+                  />
+                </div>
               )}
             </div>
           </div>

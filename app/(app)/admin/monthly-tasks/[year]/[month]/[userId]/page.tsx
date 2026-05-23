@@ -43,7 +43,7 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
     adminClient.from('profiles').select('id, full_name, avatar_url').eq('id', userId).single(),
     adminClient
       .from('tasks')
-      .select('id, title, description, status, priority, category, task_type, complexity, start_date, due_date, completion_date, approval_status')
+      .select('id, title, description, status, priority, category, task_type, complexity, start_date, due_date, completion_date, approval_status, score_weight, source_announcement_id')
       .eq('user_id', userId)
       .neq('is_draft', true)
       .is('parent_task_id', null)
@@ -82,6 +82,23 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
       }
     : null
 
+  // Fetch announcement reward info for announcement-sourced tasks
+  const sourceIds = Array.from(new Set(tasks.map(t => t.source_announcement_id).filter(Boolean) as string[]))
+  const announcementRewardMap: Record<string, { awardName: string | null; awardIcon: string | null; bonusPoints: number }> = {}
+  if (sourceIds.length > 0) {
+    const { data: anns } = await adminClient
+      .from('announcements')
+      .select('id, bonus_points, award_types(name, icon)')
+      .in('id', sourceIds)
+    for (const row of (anns ?? []) as unknown as Array<{ id: string; bonus_points: number; award_types: { name: string; icon: string } | null }>) {
+      announcementRewardMap[row.id] = {
+        awardName: row.award_types?.name ?? null,
+        awardIcon: row.award_types?.icon ?? null,
+        bonusPoints: row.bonus_points,
+      }
+    }
+  }
+
   const awards: MonthAwardRow[] = (awardsRes.data ?? []).map(a => {
     const at = (a as unknown as { award_types: { name: string; icon: string; description: string | null } | null }).award_types
     return {
@@ -103,6 +120,7 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
       tasks={tasks}
       score={score}
       awards={awards}
+      announcementRewardMap={announcementRewardMap}
     />
   )
 }

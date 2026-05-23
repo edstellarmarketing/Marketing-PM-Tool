@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CheckCircle, XCircle, Zap, ArrowRight, CalendarDays, Clock, History, Sparkles } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { volumeTierFor, DEFAULT_VOLUME_TIERS } from '@/lib/scoring'
+import PendingApprovalProof from '@/components/announcements/PendingApprovalProof'
 
 type PendingApprovalType = 'task_completion' | 'date_change'
 type ViewMode = 'pending' | 'history'
@@ -478,7 +479,10 @@ export default function PendingApprovalsTable({ isAdmin }: PendingApprovalsTable
                               <Link href={`/tasks/${(row.details as DateChangeDetails).task_id}`} className="text-sm font-medium text-blue-600 hover:underline mb-1.5 block">{row.title}</Link>
                             )}
                             {row.type === 'task_completion' ? (
-                              <TaskCompletionDetailView details={row.details as TaskCompletionDetails} />
+                              <>
+                                <TaskCompletionDetailView details={row.details as TaskCompletionDetails} />
+                                <PendingApprovalProof taskId={row.id} />
+                              </>
                             ) : (
                               <DateChangeDetailView details={row.details as DateChangeDetails} />
                             )}
@@ -562,7 +566,10 @@ export default function PendingApprovalsTable({ isAdmin }: PendingApprovalsTable
                             <Link href={`/tasks/${(row.details as DateChangeDetails).task_id}`} className="text-sm font-medium text-blue-600 hover:underline mb-1.5 block">{row.title}</Link>
                           )}
                           {row.type === 'task_completion' ? (
-                            <TaskCompletionDetailView details={row.details as TaskCompletionDetails} />
+                            <>
+                              <TaskCompletionDetailView details={row.details as TaskCompletionDetails} />
+                              <PendingApprovalProof taskId={row.id} />
+                            </>
                           ) : (
                             <DateChangeDetailView details={row.details as DateChangeDetails} />
                           )}

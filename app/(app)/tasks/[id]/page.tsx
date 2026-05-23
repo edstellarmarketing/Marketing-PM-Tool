@@ -8,6 +8,7 @@ import TaskSubtasksStatusSection from '@/components/tasks/TaskSubtasksStatusSect
 import PrioritySelect from '@/components/tasks/PrioritySelect'
 import DependencyDashboard from '@/components/tasks/DependencyDashboard'
 import GiveAwardButton from '@/components/admin/GiveAwardButton'
+import TaskAnnouncementSection from '@/components/announcements/TaskAnnouncementSection'
 import type { DependencyChildData } from '@/components/tasks/DependencyAccordion'
 import type { Task, TaskUpdate } from '@/types'
 import { volumeTierFor, volumeTiersFromConfig } from '@/lib/scoring'
@@ -180,6 +181,15 @@ export default async function TaskDetailPage({ params }: Props) {
             {statusLabels[parentSummary.status] ?? parentSummary.status}
           </span>
         </div>
+      )}
+
+      {task.source_announcement_id && (
+        <TaskAnnouncementSection
+          taskId={task.id}
+          announcementId={task.source_announcement_id}
+          canUpload={isViewerAdmin || (authUser?.id === task.user_id)}
+          isApproved={task.approval_status === 'approved' && task.status === 'done'}
+        />
       )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">

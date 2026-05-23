@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Trophy, Target, Award as AwardIcon, Sparkles } from 'lucide-react'
+import AnnouncementRewardBadge, { AnnouncementRibbon } from '@/components/announcements/AnnouncementRewardBadge'
 
 interface UserInfo {
   id: string
@@ -25,6 +26,14 @@ export interface MonthlyTaskRow {
   due_date: string | null
   completion_date: string | null
   approval_status: string | null
+  score_weight: number | null
+  source_announcement_id: string | null
+}
+
+export interface AnnouncementRewardMapEntry {
+  awardName: string | null
+  awardIcon: string | null
+  bonusPoints: number
 }
 
 export interface MonthlyScoreSummary {
@@ -58,6 +67,8 @@ interface Props {
   backHref?: string
   /** Override the back-link label (defaults to "<Month> <Year>"). */
   backLabel?: string
+  /** Keyed by source_announcement_id; rows with a match get the gold ribbon + badge. */
+  announcementRewardMap?: Record<string, AnnouncementRewardMapEntry>
 }
 
 const MONTHS = [
@@ -101,7 +112,7 @@ function formatDate(d: string | null): string {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
-export default function MonthUserClient({ year, month, user, tasks: initialTasks, score, awards, backHref, backLabel }: Props) {
+export default function MonthUserClient({ year, month, user, tasks: initialTasks, score, awards, backHref, backLabel, announcementRewardMap = {} }: Props) {
   const monthHref = backHref ?? `/admin/monthly-tasks/${year}/${String(month).padStart(2, '0')}`
   const linkLabel = backLabel ?? `${MONTHS[month - 1]} ${year}`
   const [tasks, setTasks] = useState<MonthlyTaskRow[]>(initialTasks)
@@ -261,6 +272,7 @@ export default function MonthUserClient({ year, month, user, tasks: initialTasks
           tasks={pendingTasks}
           updatingId={updatingId}
           onStatusChange={handleStatusChange}
+          rewardMap={announcementRewardMap}
         />
         <TaskPanel
           title="Completed"
@@ -269,6 +281,7 @@ export default function MonthUserClient({ year, month, user, tasks: initialTasks
           tasks={doneTasks}
           updatingId={updatingId}
           onStatusChange={handleStatusChange}
+          rewardMap={announcementRewardMap}
         />
       </div>
     </div>
@@ -276,7 +289,7 @@ export default function MonthUserClient({ year, month, user, tasks: initialTasks
 }
 
 function TaskPanel({
-  title, subtitle, tone, tasks, updatingId, onStatusChange,
+  title, subtitle, tone, tasks, updatingId, onStatusChange, rewardMap = {},
 }: {
   title: string
   subtitle: string
@@ -284,6 +297,7 @@ function TaskPanel({
   tasks: MonthlyTaskRow[]
   updatingId: string | null
   onStatusChange: (taskId: string, status: TaskStatus) => void
+  rewardMap?: Record<string, AnnouncementRewardMapEntry>
 }) {
   const headerCls = tone === 'red'
     ? 'bg-red-50/60 dark:bg-red-950/30 text-red-700 dark:text-red-300'
@@ -328,21 +342,38 @@ function TaskPanel({
               <tbody>
                 {tasks.map(t => {
                   const isUpdating = updatingId === t.id
+                  const reward = t.source_announcement_id ? rewardMap[t.source_announcement_id] : null
                   return (
-                    <tr key={t.id} className={`border-t border-gray-300 dark:border-gray-700 align-top ${rowBg}`}>
-                      <td className="px-2 py-1.5 text-gray-900 dark:text-white">
-                        <Link
-                          href={`/tasks/${t.id}`}
-                          className="font-medium hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          {t.title}
-                        </Link>
-                        {t.description && (
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.description}</p>
-                        )}
-                        {t.approval_status === 'pending_approval' && (
-                          <p className="text-[10px] mt-0.5 text-amber-700 dark:text-amber-400">⏳ Pending approval</p>
-                        )}
+                    <tr key={t.id} className={`border-t border-gray-300 dark:border-gray-700 align-top ${rowBg} relative`}>
+                      <td className="px-2 py-1.5 text-gray-900 dark:text-white relative">
+                        {reward && <AnnouncementRibbon />}
+                        <div className={reward ? 'pl-2.5' : ''}>
+                          <Link
+                            href={`/tasks/${t.id}`}
+                            className="font-medium hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                          >
+                            {t.title}
+                          </Link>
+                          {t.description && (
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.description}</p>
+                          )}
+                          {t.approval_status === 'pending_approval' && (
+                            <p className="text-[10px] mt-0.5 text-amber-700 dark:text-amber-400">⏳ Pending approval</p>
+                          )}
+                          {reward && (
+                            <div className="mt-1">
+                              <AnnouncementRewardBadge
+                                reward={{
+                                  awardName: reward.awardName,
+                                  awardIcon: reward.awardIcon,
+                                  bonusPoints: reward.bonusPoints,
+                                  taskPoints: t.score_weight ?? 0,
+                                  status: t.status === 'done' && t.approval_status === 'approved' ? 'granted' : 'pending',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{t.task_type ? t.task_type.replace(/_/g, ' ') : '—'}</td>
                       <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{t.complexity ?? '—'}</td>

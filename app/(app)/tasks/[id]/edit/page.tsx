@@ -417,19 +417,34 @@ export default function EditTaskPage({ params }: Props) {
 
           <div>
             <div className="grid grid-cols-2 gap-4">
-              {(['start_date', 'due_date'] as const).map(field => (
-                <div key={field}>
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1">
-                    {field === 'start_date' ? 'Start Date' : 'Due Date'}
-                    {!isAdmin && <Lock size={11} className="text-gray-400" />}
-                  </label>
-                  <input type="date" value={form[field]} onChange={e => setField(field, e.target.value)} disabled={!isAdmin}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      !isAdmin ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed' : 'border-gray-300'}`} />
-                </div>
-              ))}
+              {(['start_date', 'due_date'] as const).map(field => {
+                const lockedByAnnouncement = field === 'due_date' && !!task?.source_announcement_id
+                const locked = lockedByAnnouncement || !isAdmin
+                return (
+                  <div key={field}>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1">
+                      {field === 'start_date' ? 'Start Date' : 'Due Date'}
+                      {locked && <Lock size={11} className={lockedByAnnouncement ? 'text-amber-500' : 'text-gray-400'} />}
+                    </label>
+                    <input type="date" value={form[field]} onChange={e => setField(field, e.target.value)} disabled={locked}
+                      title={lockedByAnnouncement ? 'Locked by announcement — cannot be changed after acceptance.' : undefined}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        locked
+                          ? lockedByAnnouncement
+                            ? 'bg-amber-50 border-amber-200 text-amber-900 cursor-not-allowed'
+                            : 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
+                          : 'border-gray-300'
+                      }`} />
+                    {lockedByAnnouncement && (
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        Locked from announcement — talk to the admin to change.
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
-            {!isAdmin && (
+            {!isAdmin && !task?.source_announcement_id && (
               <div className="mt-3">
                 {pendingDateRequest ? (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2.5 text-xs text-yellow-800">
@@ -440,7 +455,7 @@ export default function EditTaskPage({ params }: Props) {
                     <p className="mt-1 text-yellow-700">
                       Requested: {pendingDateRequest.requested_start_date ?? '—'} → {pendingDateRequest.requested_due_date ?? '—'}
                     </p>
-                    {pendingDateRequest.reason && <p className="mt-1 text-yellow-700 italic">"{pendingDateRequest.reason}"</p>}
+                    {pendingDateRequest.reason && <p className="mt-1 text-yellow-700 italic">&ldquo;{pendingDateRequest.reason}&rdquo;</p>}
                   </div>
                 ) : (
                   <DateChangeRequestForm taskId={id} currentStart={form.start_date || null} currentDue={form.due_date || null}
