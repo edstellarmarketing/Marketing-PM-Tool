@@ -30,8 +30,10 @@ const statusConfig = {
 }
 
 export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onClose }: Props) {
-  const [note,    setNote]    = useState('')
-  const [loading, setLoading] = useState(false)
+  const [leaveType, setLeaveType] = useState<'sick' | 'casual' | null>(null)
+  const [halfDay,   setHalfDay]   = useState(false)
+  const [note,      setNote]      = useState('')
+  const [loading,   setLoading]   = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -43,9 +45,10 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
     return () => document.removeEventListener('mousedown', handleClick)
   }, [onClose])
 
-  async function handleAdd(leave_type: 'sick' | 'casual', is_half_day: boolean) {
+  async function handleSubmit() {
+    if (!leaveType) return
     setLoading(true)
-    await onAdd(leave_type, is_half_day, note)
+    await onAdd(leaveType, halfDay, note)
     setLoading(false)
   }
 
@@ -67,6 +70,7 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
   return (
     <div
       ref={ref}
+      onClick={e => e.stopPropagation()}
       className="absolute z-30 bg-white border border-gray-200 rounded-xl shadow-lg p-3 min-w-[210px] left-1/2 -translate-x-1/2 mt-1"
     >
       <div className="flex items-center justify-between mb-2">
@@ -114,59 +118,75 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-gray-400 mb-1">Apply for leave:</p>
+          <p className="text-xs text-gray-400 mb-1">1. Choose leave type:</p>
 
-          {/* Sick row */}
+          {/* Leave type selection */}
           <div className="flex gap-1.5">
             <button
+              type="button"
               onMouseDown={e => e.preventDefault()}
-              onClick={() => handleAdd('sick', false)}
+              onClick={() => setLeaveType('sick')}
               disabled={loading}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                leaveType === 'sick'
+                  ? 'text-orange-800 bg-orange-100 border-orange-400 ring-1 ring-orange-300'
+                  : 'text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100'
+              }`}
             >
-              {loading ? <Loader2 size={11} className="animate-spin" /> : <span>🟠</span>}
+              <span>🟠</span>
               Sick
             </button>
             <button
+              type="button"
               onMouseDown={e => e.preventDefault()}
-              onClick={() => handleAdd('sick', true)}
+              onClick={() => setLeaveType('casual')}
               disabled={loading}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-orange-600 bg-orange-50/60 border border-dashed border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                leaveType === 'casual'
+                  ? 'text-sky-800 bg-sky-100 border-sky-400 ring-1 ring-sky-300'
+                  : 'text-sky-700 bg-sky-50 border-sky-200 hover:bg-sky-100'
+              }`}
             >
-              {loading ? <Loader2 size={11} className="animate-spin" /> : <span>🟠</span>}
-              ½ Sick
-            </button>
-          </div>
-
-          {/* Casual row */}
-          <div className="flex gap-1.5">
-            <button
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => handleAdd('casual', false)}
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors"
-            >
-              {loading ? <Loader2 size={11} className="animate-spin" /> : <span>🔵</span>}
+              <span>🔵</span>
               Casual
             </button>
-            <button
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => handleAdd('casual', true)}
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-sky-600 bg-sky-50/60 border border-dashed border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors"
-            >
-              {loading ? <Loader2 size={11} className="animate-spin" /> : <span>🔵</span>}
-              ½ Casual
-            </button>
           </div>
 
+          {/* Half-day toggle */}
+          <label
+            onMouseDown={e => e.preventDefault()}
+            className="flex items-center gap-2 text-xs text-gray-600 px-1 py-0.5 cursor-pointer select-none"
+          >
+            <input
+              type="checkbox"
+              checked={halfDay}
+              onChange={e => setHalfDay(e.target.checked)}
+              disabled={loading}
+              className="rounded border-gray-300 text-teal-500 focus:ring-teal-400"
+            />
+            Half day
+          </label>
+
+          <p className="text-xs text-gray-400 mb-1">2. Add a reason (optional):</p>
           <input
             type="text"
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Reason (optional)…"
+            placeholder="Reason…"
             className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
           />
+
+          {/* Explicit submit */}
+          <button
+            type="button"
+            onMouseDown={e => e.preventDefault()}
+            onClick={handleSubmit}
+            disabled={loading || !leaveType}
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-2 text-xs font-semibold text-white bg-teal-500 rounded-lg hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+            Submit leave request
+          </button>
           <p className="text-[10px] text-gray-400 text-center">Leave request will be sent for admin approval</p>
         </div>
       )}
