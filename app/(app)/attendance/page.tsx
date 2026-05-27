@@ -23,6 +23,7 @@ export default function AttendancePage() {
   const [year,  setYear]  = useState(now.getFullYear())
   const [leaves, setLeaves] = useState<AttendanceLeave[]>([])
   const [loading, setLoading] = useState(true)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const fetchLeaves = useCallback(async () => {
     setLoading(true)
@@ -43,6 +44,7 @@ export default function AttendancePage() {
   }
 
   const handleAdd = useCallback(async (date: string, leave_type: 'sick' | 'casual', is_half_day: boolean, note: string) => {
+    setActionError(null)
     const res = await fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -51,6 +53,12 @@ export default function AttendancePage() {
     if (res.ok) {
       const newLeave: AttendanceLeave = await res.json()
       setLeaves(prev => [...prev, newLeave].sort((a, b) => a.date.localeCompare(b.date)))
+    } else {
+      const data = await res.json().catch(() => null)
+      const message = typeof data?.error === 'string'
+        ? data.error
+        : `Could not apply leave (${res.status}). Please try again.`
+      setActionError(message)
     }
   }, [])
 
@@ -98,6 +106,19 @@ export default function AttendancePage() {
       {/* Status banner */}
       {!loading && (
         <LeaveStatusBanner leaves={leaves} month={month} year={year} />
+      )}
+
+      {/* Action error */}
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-2.5">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-red-400 hover:text-red-600 text-xs font-medium shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {/* Calendar */}
