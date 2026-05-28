@@ -261,10 +261,13 @@ export interface AttendanceMonthSummary {
 
 export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived'
 export type ProjectTaskStatus = 'pending' | 'in_progress' | 'completed'
+export type ProjectDomain = 'Edstellar' | 'Invensis'
+export const PROJECT_DOMAINS: readonly ProjectDomain[] = ['Edstellar', 'Invensis']
 
 export interface Project {
   id: string
   name: string
+  domain: ProjectDomain | null
   description: string | null
   start_date: string | null
   end_date: string | null

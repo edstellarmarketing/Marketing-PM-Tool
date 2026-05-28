@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, FolderPlus } from 'lucide-react'
+import { PROJECT_DOMAINS, type ProjectDomain } from '@/types'
 
 interface Props {
   onClose: () => void
@@ -12,6 +13,7 @@ export default function CreateProjectModal({ onClose }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     name: '',
+    domain: '' as '' | ProjectDomain,
     description: '',
     start_date: '',
     end_date: '',
@@ -23,6 +25,10 @@ export default function CreateProjectModal({ onClose }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    if (!form.domain) {
+      setError('Please pick a Domain.')
+      return
+    }
     setLoading(true)
 
     const res = await fetch('/api/projects', {
@@ -30,6 +36,7 @@ export default function CreateProjectModal({ onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: form.name.trim(),
+        domain: form.domain,
         description: form.description.trim() || null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -59,6 +66,24 @@ export default function CreateProjectModal({ onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Domain *</label>
+            <select
+              required
+              value={form.domain}
+              onChange={e => setForm(p => ({ ...p, domain: e.target.value as '' | ProjectDomain }))}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="" disabled>Select a domain…</option>
+              {PROJECT_DOMAINS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Shown as a prefix to the project name (e.g. <strong>{form.domain || 'Edstellar'} - {form.name || 'LMS'}</strong>).
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name *</label>
             <input

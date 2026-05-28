@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/api'
 
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
+  domain: z.enum(['Edstellar', 'Invensis']).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
   start_date: z.string().nullable().optional(),
   end_date: z.string().nullable().optional(),

@@ -7,6 +7,7 @@ import {
   type ProjectDigestTask,
 } from '@/lib/email'
 import { buildAdminProjectDigest, buildOwnerProjectDigest } from '@/lib/project-digest'
+import { formatProjectName } from '@/lib/utils'
 
 // Vercel Cron: 02:30 UTC daily = 08:00 IST
 export async function GET(req: NextRequest) {
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
   // Pull projects where EITHER flag is on; per-section gating below
   const { data: projects, error: projectsErr } = await admin
     .from('projects')
-    .select('id, name, start_date, end_date, notify_email_enabled, notify_owner_email_enabled')
+    .select('id, name, domain, start_date, end_date, notify_email_enabled, notify_owner_email_enabled')
     .or('notify_email_enabled.eq.true,notify_owner_email_enabled.eq.true')
     .neq('status', 'archived')
     .order('created_at', { ascending: false })
@@ -104,6 +105,7 @@ export async function GET(req: NextRequest) {
 
   for (const project of projects) {
     const projectOwners = ownersByProject[project.id] ?? []
+    const displayName = formatProjectName(project)
 
     // Owner mails (gated by notify_owner_email_enabled)
     if (project.notify_owner_email_enabled) {
@@ -122,7 +124,7 @@ export async function GET(req: NextRequest) {
 
         const html = projectOwnerDigestEmailHtml({
           ownerName: ownerProfile.full_name,
-          projectName: project.name,
+          projectName: displayName,
           projectUrl: `${appUrl}/projects/${project.id}`,
           department: owner.department,
           today,
@@ -130,7 +132,7 @@ export async function GET(req: NextRequest) {
           pendingToday: ownerDigest.pendingToday,
           upcoming: ownerDigest.upcoming,
         })
-        await sendEmail(email, `[${project.name}] Daily digest — ${owner.department}`, html)
+        await sendEmail(email, `[${displayName}] Daily digest — ${owner.department}`, html)
         ownerEmailsSent += 1
       }
     }
@@ -138,7 +140,7 @@ export async function GET(req: NextRequest) {
     // Admin mail (gated by notify_email_enabled)
     if (project.notify_email_enabled) {
       const digestData = buildAdminProjectDigest({
-        project,
+        project: { ...project, name: displayName },
         owners: projectOwners,
         tasksByOwner,
         profileById,
@@ -154,7 +156,7 @@ export async function GET(req: NextRequest) {
             appUrl,
             project: digestData,
           })
-          await sendEmail(email, `[${project.name}] Daily project digest — ${today}`, html)
+          await sendEmail(email, `[${displayName}] Daily project digest — ${today}`, html)
           adminEmailsSent += 1
         }
       }

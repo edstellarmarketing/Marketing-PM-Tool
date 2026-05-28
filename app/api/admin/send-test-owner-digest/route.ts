@@ -8,6 +8,7 @@ import {
   type ProjectDigestTask,
 } from '@/lib/email'
 import { buildOwnerProjectDigest } from '@/lib/project-digest'
+import { formatProjectName } from '@/lib/utils'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -38,10 +39,11 @@ export async function POST(req: NextRequest) {
 
   const { data: project } = await admin
     .from('projects')
-    .select('id, name, start_date, end_date')
+    .select('id, name, domain, start_date, end_date')
     .eq('id', parsed.data.project_id)
     .single()
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  const displayName = formatProjectName(project)
 
   const { data: owners } = await admin
     .from('project_owners')
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
 
   const html = projectOwnerDigestEmailHtml({
     ownerName: ownerProfileName,
-    projectName: project.name,
+    projectName: displayName,
     projectUrl: `${appUrl}/projects/${project.id}`,
     department: targetOwner.department,
     today,
@@ -101,7 +103,7 @@ export async function POST(req: NextRequest) {
   })
 
   const suffix = isPreviewForSomeoneElse ? ` (preview of ${ownerProfileName}'s digest)` : ''
-  await sendEmail(to, `[TEST] [${project.name}] ${targetOwner.department} digest${suffix}`, html)
+  await sendEmail(to, `[TEST] [${displayName}] ${targetOwner.department} digest${suffix}`, html)
 
   return NextResponse.json({
     sent: true,

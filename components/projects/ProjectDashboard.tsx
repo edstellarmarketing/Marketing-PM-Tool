@@ -9,6 +9,7 @@ import {
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
 import ProjectSettingsModal from './ProjectSettingsModal'
+import { formatProjectName } from '@/lib/utils'
 import type { Project, ProjectTask, Profile, ProjectOwner } from '@/types'
 
 interface Props {
@@ -262,7 +263,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{formatProjectName(project)}</h1>
             {project.description && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">{project.description}</p>
             )}

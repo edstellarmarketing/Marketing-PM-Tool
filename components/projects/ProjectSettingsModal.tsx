@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Save, Trash2, Settings as SettingsIcon, Mail, Send } from 'lucide-react'
-import type { Project, ProjectStatus } from '@/types'
+import { PROJECT_DOMAINS, type Project, type ProjectStatus, type ProjectDomain } from '@/types'
 
 interface Props {
   project: Project
@@ -14,6 +14,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     name: project.name,
+    domain: (project.domain ?? '') as '' | ProjectDomain,
     description: project.description ?? '',
     start_date: project.start_date ?? '',
     end_date: project.end_date ?? '',
@@ -63,6 +64,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: form.name.trim(),
+        domain: form.domain || null,
         description: form.description.trim() || null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -83,7 +85,8 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete the project "${project.name}"? This permanently removes all its tasks, owners, and supporting members. This cannot be undone.`)) return
+    const displayName = project.domain ? `${project.domain} - ${project.name}` : project.name
+    if (!confirm(`Delete the project "${displayName}"? This permanently removes all its tasks, owners, and supporting members. This cannot be undone.`)) return
     setError(null)
     setDeleting(true)
 
@@ -112,6 +115,23 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
         </div>
 
         <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Domain</label>
+            <select
+              value={form.domain}
+              onChange={e => setForm(p => ({ ...p, domain: e.target.value as '' | ProjectDomain }))}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— None —</option>
+              {PROJECT_DOMAINS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Shown as a prefix: <strong>{form.domain ? `${form.domain} - ${form.name || project.name}` : (form.name || project.name)}</strong>
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name *</label>
             <input

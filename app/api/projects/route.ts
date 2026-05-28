@@ -5,6 +5,7 @@ import { getAuthUser, requireAdmin } from '@/lib/api'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
+  domain: z.enum(['Edstellar', 'Invensis']),
   description: z.string().max(2000).optional().nullable(),
   start_date: z.string().optional().nullable(),
   end_date: z.string().optional().nullable(),
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
     .from('projects')
     .insert({
       name: parsed.data.name,
+      domain: parsed.data.domain,
       description: parsed.data.description ?? null,
       start_date: parsed.data.start_date || null,
       end_date: parsed.data.end_date || null,

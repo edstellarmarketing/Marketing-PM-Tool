@@ -8,6 +8,7 @@ import {
   type ProjectDigestTask,
 } from '@/lib/email'
 import { buildAdminProjectDigest } from '@/lib/project-digest'
+import { formatProjectName } from '@/lib/utils'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -38,11 +39,12 @@ export async function POST(req: NextRequest) {
 
   const { data: project } = await admin
     .from('projects')
-    .select('id, name, start_date, end_date')
+    .select('id, name, domain, start_date, end_date')
     .eq('id', parsed.data.project_id)
     .single()
 
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  const displayName = formatProjectName(project)
 
   const istOffset = 5.5 * 60 * 60 * 1000
   const nowIST = new Date(new Date().getTime() + istOffset)
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   const digestData = buildAdminProjectDigest({
-    project,
+    project: { ...project, name: displayName },
     owners: owners ?? [],
     tasksByOwner,
     profileById,
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
     project: digestData,
   })
 
-  await sendEmail(to, `[TEST] [${project.name}] Daily project digest — ${today}`, html)
+  await sendEmail(to, `[TEST] [${displayName}] Daily project digest — ${today}`, html)
 
-  return NextResponse.json({ sent: true, to, project: project.name })
+  return NextResponse.json({ sent: true, to, project: displayName })
 }

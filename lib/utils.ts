@@ -19,6 +19,12 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+// Domain acts as a display prefix: "Edstellar - LMS". Falls back to just the
+// name for legacy projects that pre-date the domain column.
+export function formatProjectName(p: { domain?: string | null; name: string }): string {
+  return p.domain ? `${p.domain} - ${p.name}` : p.name
+}
+
 export function getCurrentFinancialYear(): string {
   const now = new Date()
   const year = now.getFullYear()
