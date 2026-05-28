@@ -69,6 +69,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deletingBulk, setDeletingBulk] = useState(false)
+  const [bulkSelectMenuOpen, setBulkSelectMenuOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'open' | 'completed' | 'all'>('open')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [teamOpen, setTeamOpen] = useState(owners.length === 0)
@@ -208,6 +209,20 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
     const filteredIds = filtered.map(t => t.id)
     const allChecked = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id))
     setSelectedIds(allChecked ? new Set() : new Set(filteredIds))
+  }
+
+  // Visible task order matches what the user sees: attention rows first,
+  // then sorted regular rows. "Select first N" picks from this sequence
+  // so the chunk the admin selects matches what's on screen.
+  const orderedFilteredIds = useMemo(
+    () => [...attentionRows, ...sortedRegularRows].map(t => t.id),
+    [attentionRows, sortedRegularRows]
+  )
+
+  function selectFirstN(n: number | 'all') {
+    const ids = n === 'all' ? orderedFilteredIds : orderedFilteredIds.slice(0, n)
+    setSelectedIds(new Set(ids))
+    setBulkSelectMenuOpen(false)
   }
 
   async function deleteSelected() {
@@ -518,20 +533,85 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                 {isAdmin && (
-                  <th className="px-3 py-2 w-10 sticky left-0 z-20 bg-white dark:bg-gray-900">
-                    <input
-                      type="checkbox"
-                      checked={allFilteredSelected}
-                      ref={el => { if (el) el.indeterminate = someFilteredSelected }}
-                      onChange={toggleAllFiltered}
-                      title={allFilteredSelected ? 'Deselect all' : 'Select all filtered tasks'}
-                      className="rounded border-gray-300"
-                    />
+                  <th className="px-3 py-2 w-14 sticky left-0 z-20 bg-white dark:bg-gray-900">
+                    <div className="flex items-center gap-1 relative">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        ref={el => { if (el) el.indeterminate = someFilteredSelected }}
+                        onChange={toggleAllFiltered}
+                        title={allFilteredSelected ? 'Deselect all' : 'Select all filtered tasks'}
+                        className="rounded border-gray-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBulkSelectMenuOpen(o => !o)}
+                        className="p-0.5 text-gray-500 hover:text-blue-600"
+                        title="Bulk select options"
+                        aria-expanded={bulkSelectMenuOpen}
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                      {bulkSelectMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setBulkSelectMenuOpen(false)}
+                          />
+                          <div className="absolute top-full left-0 mt-1 z-30 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1">
+                            <button
+                              type="button"
+                              onClick={() => selectFirstN(50)}
+                              disabled={filteredCount === 0}
+                              className="w-full text-left px-3 py-1.5 text-xs normal-case tracking-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Select first 50
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectFirstN(100)}
+                              disabled={filteredCount === 0}
+                              className="w-full text-left px-3 py-1.5 text-xs normal-case tracking-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Select first 100
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectFirstN(250)}
+                              disabled={filteredCount === 0}
+                              className="w-full text-left px-3 py-1.5 text-xs normal-case tracking-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Select first 250
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectFirstN('all')}
+                              disabled={filteredCount === 0}
+                              className="w-full text-left px-3 py-1.5 text-xs normal-case tracking-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Select all ({filteredCount})
+                            </button>
+                            {selectedIds.size > 0 && (
+                              <>
+                                <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedIds(new Set()); setBulkSelectMenuOpen(false) }}
+                                  className="w-full text-left px-3 py-1.5 text-xs normal-case tracking-normal text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                >
+                                  Clear selection
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </th>
                 )}
                 <th
                   className="px-4 py-2 font-medium w-64 sticky z-20 bg-white dark:bg-gray-900 shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]"
-                  style={{ left: isAdmin ? 40 : 0 }}
+                  style={{ left: isAdmin ? 56 : 0 }}
                 >
                   Task
                 </th>
@@ -627,7 +707,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                       )}
                       <td
                         className={`px-4 py-3 sticky z-10 ${rowBg} ${groupHover} shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
-                        style={{ left: isAdmin ? 40 : 0 }}
+                        style={{ left: isAdmin ? 56 : 0 }}
                       >
                         <button
                           onClick={() => setEditingTask(t)}
