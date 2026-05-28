@@ -20,14 +20,32 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   if (!project) notFound()
 
-  const [tasksRes, ownersRes, membersRes, allMembersRes] = await Promise.all([
-    supabase.from('project_tasks').select('*').eq('project_id', id).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true }),
+  // PostgREST caps a single response at 1000 rows. Page through so projects
+  // with more than 1000 tasks render fully.
+  const tasksPromise = (async (): Promise<ProjectTask[]> => {
+    const PAGE = 1000
+    const out: ProjectTask[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
+        .from('project_tasks')
+        .select('*')
+        .eq('project_id', id)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (!data || data.length === 0) break
+      out.push(...(data as ProjectTask[]))
+      if (data.length < PAGE) break
+    }
+    return out
+  })()
+
+  const [tasks, ownersRes, membersRes, allMembersRes] = await Promise.all([
+    tasksPromise,
     supabase.from('project_owners').select('*').eq('project_id', id).order('created_at', { ascending: true }),
     supabase.from('project_owner_members').select('*'),
     supabase.from('profiles').select('id, full_name, avatar_url').order('full_name', { ascending: true }),
   ])
-
-  const tasks = (tasksRes.data ?? []) as ProjectTask[]
   const owners = (ownersRes.data ?? []) as ProjectOwner[]
   const allMembers = (allMembersRes.data ?? []) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   const ownerMembers = (membersRes.data ?? []) as ProjectOwnerMember[]

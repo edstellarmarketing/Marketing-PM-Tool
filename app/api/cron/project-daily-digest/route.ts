@@ -37,18 +37,40 @@ export async function GET(req: NextRequest) {
 
   const projectIds = projects.map(p => p.id)
 
+  // PostgREST caps a single response at 1000 rows; page the tasks read so
+  // projects with more than 1000 tasks are fully counted in the digest.
+  type DigestTaskRow = {
+    id: string; project_id: string; owner_id: string | null
+    title: string; status: string; priority: string
+    progress: number; start_date: string | null; due_date: string | null
+    dependency_task: string | null; dependency_status: string | null
+  }
+  const tasksPromise = (async (): Promise<DigestTaskRow[]> => {
+    const PAGE = 1000
+    const out: DigestTaskRow[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await admin
+        .from('project_tasks')
+        .select('id, project_id, owner_id, title, status, priority, progress, start_date, due_date, dependency_task, dependency_status')
+        .in('project_id', projectIds)
+        .range(from, from + PAGE - 1)
+      if (!data || data.length === 0) break
+      out.push(...(data as DigestTaskRow[]))
+      if (data.length < PAGE) break
+    }
+    return out
+  })()
+
   const [
     { data: ownersRaw },
-    { data: tasksRaw },
+    tasksRaw,
     { data: profiles },
     { data: { users: authUsers } },
   ] = await Promise.all([
     admin.from('project_owners')
       .select('id, project_id, user_id, department')
       .in('project_id', projectIds),
-    admin.from('project_tasks')
-      .select('id, project_id, owner_id, title, status, priority, progress, start_date, due_date, dependency_task, dependency_status')
-      .in('project_id', projectIds),
+    tasksPromise,
     admin.from('profiles').select('id, full_name, role, is_active'),
     admin.auth.admin.listUsers({ perPage: 500 }),
   ])
@@ -61,7 +83,7 @@ export async function GET(req: NextRequest) {
   }
 
   const owners = ownersRaw ?? []
-  const tasks = tasksRaw ?? []
+  const tasks = tasksRaw
 
   const ownersByProject: Record<string, typeof owners> = {}
   for (const o of owners) {

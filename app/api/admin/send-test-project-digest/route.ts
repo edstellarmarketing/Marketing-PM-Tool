@@ -48,23 +48,40 @@ export async function POST(req: NextRequest) {
   const nowIST = new Date(new Date().getTime() + istOffset)
   const today = nowIST.toISOString().slice(0, 10)
 
+  // PostgREST caps a single response at 1000 rows; page the tasks read so a
+  // project with more than 1000 tasks still gets a complete digest preview.
+  type DigestTaskRow = ProjectDigestTask & { owner_id: string | null; project_id: string }
+  const tasksPromise = (async (): Promise<DigestTaskRow[]> => {
+    const PAGE = 1000
+    const out: DigestTaskRow[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await admin
+        .from('project_tasks')
+        .select('id, project_id, owner_id, title, status, priority, progress, start_date, due_date, dependency_task, dependency_status')
+        .eq('project_id', project.id)
+        .range(from, from + PAGE - 1)
+      if (!data || data.length === 0) break
+      out.push(...(data as DigestTaskRow[]))
+      if (data.length < PAGE) break
+    }
+    return out
+  })()
+
   const [
     { data: owners },
-    { data: tasksRaw },
+    tasksRaw,
     { data: profiles },
   ] = await Promise.all([
     admin.from('project_owners')
       .select('id, project_id, user_id, department')
       .eq('project_id', project.id),
-    admin.from('project_tasks')
-      .select('id, project_id, owner_id, title, status, priority, progress, start_date, due_date, dependency_task, dependency_status')
-      .eq('project_id', project.id),
+    tasksPromise,
     admin.from('profiles').select('id, full_name'),
   ])
 
   const profileById = Object.fromEntries((profiles ?? []).map(p => [p.id, p]))
   const tasksByOwner: Record<string, ProjectDigestTask[]> = {}
-  for (const t of tasksRaw ?? []) {
+  for (const t of tasksRaw) {
     if (!t.owner_id) continue
     if (!tasksByOwner[t.owner_id]) tasksByOwner[t.owner_id] = []
     tasksByOwner[t.owner_id].push(t as ProjectDigestTask)

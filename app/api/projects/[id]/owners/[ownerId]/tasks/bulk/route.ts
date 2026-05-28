@@ -78,11 +78,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     created_by: user.id,
   }))
 
-  const { data, error: dbError } = await supabase
+  // No .select() — the inserted count is exactly inserts.length when no error
+  // is returned, and skipping the echo avoids the PostgREST row cap entirely.
+  const { error: dbError } = await supabase
     .from('project_tasks')
     .insert(inserts)
-    .select('id')
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
-  return NextResponse.json({ inserted: data?.length ?? 0 }, { status: 201 })
+  return NextResponse.json({ inserted: inserts.length }, { status: 201 })
 }
