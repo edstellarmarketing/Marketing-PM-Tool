@@ -9,21 +9,18 @@ interface Props {
   year: number
 }
 
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
-
 function dayCount(leaves: AttendanceLeave[], type: 'sick' | 'casual') {
   return leaves
     .filter(l => l.leave_type === type && l.status !== 'rejected')
     .reduce((sum, l) => sum + (l.is_half_day ? 0.5 : 1), 0)
 }
 
-export default function LeaveStatusBanner({ leaves, month }: Props) {
+export default function LeaveStatusBanner({ leaves }: Props) {
   const approvedLeaves = leaves.filter(l => l.status === 'approved')
   const pendingLeaves  = leaves.filter(l => l.status === 'pending')
   const sickDays   = dayCount(approvedLeaves, 'sick')
   const casualDays = dayCount(approvedLeaves, 'casual')
   const totalDays  = sickDays + casualDays
-  const monthName  = MONTH_NAMES[month - 1]
 
   // Still eligible if no approved leaves (pending doesn't disqualify yet)
   if (approvedLeaves.length === 0) {
@@ -64,10 +61,7 @@ export default function LeaveStatusBanner({ leaves, month }: Props) {
               🔵 {fmt(casualDays)} casual
             </span>
           )}
-          <span className="text-amber-700 font-normal">{fmt(totalDays)} day{totalDays !== 1 ? 's' : ''} logged in {monthName}</span>
-        </p>
-        <p className="text-xs text-amber-600 mt-0.5">
-          You will not receive the perfect attendance bonus this month.
+          <span className="text-amber-700 font-normal">{fmt(totalDays)} day{totalDays !== 1 ? 's' : ''} leave approved</span>
         </p>
       </div>
     </div>

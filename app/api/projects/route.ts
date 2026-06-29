@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser, requireAdmin } from '@/lib/api'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getAuthUser, requireAdminOrTeamLead } from '@/lib/api'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -28,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
@@ -37,7 +38,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  // Projects RLS is admin-only (migration 056); team leads are authorized here
+  // at the handler layer, so write via the service-role client.
+  const supabase = createAdminClient()
   const { data, error: dbError } = await supabase
     .from('projects')
     .insert({

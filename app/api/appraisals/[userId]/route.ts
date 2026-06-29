@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAuthUser, requireAdmin } from '@/lib/api'
+import { getAuthUser, requireManages } from '@/lib/api'
 import { chatCompletion } from '@/lib/openrouter'
 import { z } from 'zod'
 
@@ -14,13 +14,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
   const { user, error } = await getAuthUser()
   if (error) return error
 
-  // Members can only view their own appraisal
+  // Members view only their own; admins view anyone; team leads view their dept.
   if (user!.id !== userId) {
-    const { error: adminError } = await requireAdmin()
-    if (adminError) return adminError
+    const { error: manageError } = await requireManages(userId)
+    if (manageError) return manageError
   }
 
-  const supabase = await createClient()
+  // Reads of another user's snapshots are blocked by RLS; the caller is already
+  // authorized above (self, admin, or managing team lead), so read via service role.
+  const supabase = createAdminClient()
   const { searchParams } = new URL(req.url)
   const fy = searchParams.get('financial_year')
 
@@ -34,7 +36,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params
-  const { error } = await requireAdmin()
+  // Generating/drafting an appraisal is delegated: admins for anyone, team leads
+  // for their own department.
+  const { error } = await requireManages(userId)
   if (error) return error
 
   const body = await req.json()
@@ -153,7 +157,9 @@ Return only valid JSON, no markdown.`
     console.error('AI Parse Error:', err)
   }
 
-  const { data: snapshot, error: insertError } = await supabase
+  // Writing another user's snapshot is blocked by RLS; authorized above, so
+  // upsert via the service-role client.
+  const { data: snapshot, error: insertError } = await adminClient
     .from('appraisal_snapshots')
     .upsert({
       user_id: userId,

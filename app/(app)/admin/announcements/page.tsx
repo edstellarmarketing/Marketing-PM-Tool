@@ -1,7 +1,6 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { redirect } from 'next/navigation'
+import { requirePageRole } from '@/lib/api'
 import { Plus, Megaphone, Clock } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -25,19 +24,18 @@ function formatDate(d: string): string {
 }
 
 export default async function AdminAnnouncementsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const admin = createAdminClient()
+  let annQuery = admin
+    .from('announcements')
+    .select('id, title, target_mode, departments, user_ids, due_date, status, bonus_points, score_weight, created_at, award_types(name, icon, bonus_points)')
+    .order('created_at', { ascending: false })
+  // Team leads manage only the announcements they created.
+  if (me.role === 'team_lead') annQuery = annQuery.eq('created_by', me.id)
+
   const [{ data: annData }, { data: acceptanceData }] = await Promise.all([
-    admin
-      .from('announcements')
-      .select('id, title, target_mode, departments, user_ids, due_date, status, bonus_points, score_weight, created_at, award_types(name, icon, bonus_points)')
-      .order('created_at', { ascending: false }),
+    annQuery,
     admin
       .from('announcement_acceptances')
       .select('announcement_id, status'),

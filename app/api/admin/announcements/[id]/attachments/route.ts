@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   ANNOUNCEMENT_BUCKET,
@@ -13,7 +13,7 @@ const PER_ANNOUNCEMENT_LIMIT = 5
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const formData = await req.formData().catch(() => null)
@@ -27,10 +27,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Parent must exist (CASCADE handles deletion; this just gives a nicer error).
   const { data: announcement } = await admin
     .from('announcements')
-    .select('id, status')
+    .select('id, status, created_by')
     .eq('id', id)
     .single()
   if (!announcement) return NextResponse.json({ error: 'Announcement not found' }, { status: 404 })
+  // Team leads may attach only to announcements they created.
+  if (profile!.role !== 'admin' && announcement.created_by !== profile!.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   // Enforce per-announcement cap.
   const { count } = await admin

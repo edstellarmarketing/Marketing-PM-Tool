@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead, departmentUserIds } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET() {
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const admin = createAdminClient()
@@ -14,5 +14,12 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+
+  // Team leads only see requests for tasks owned by their own department.
+  let rows = data ?? []
+  if (profile!.role === 'team_lead') {
+    const ids = new Set(await departmentUserIds(profile!.department))
+    rows = rows.filter((r: { tasks?: { user_id?: string } | null }) => r.tasks?.user_id && ids.has(r.tasks.user_id))
+  }
+  return NextResponse.json(rows)
 }

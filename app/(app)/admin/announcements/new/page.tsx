@@ -1,6 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { redirect } from 'next/navigation'
+import { requirePageRole } from '@/lib/api'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import AnnouncementForm from '@/components/admin/AnnouncementForm'
@@ -8,12 +7,7 @@ import AnnouncementForm from '@/components/admin/AnnouncementForm'
 export const dynamic = 'force-dynamic'
 
 export default async function NewAnnouncementPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const admin = createAdminClient()
   const [awardsRes, profilesRes, categoriesRes, configsRes] = await Promise.all([
@@ -26,11 +20,14 @@ export default async function NewAnnouncementPage() {
       .order('config_key'),
   ])
 
-  const allProfiles = profilesRes.data ?? []
-  const departments = Array.from(
-    new Set((allProfiles.map(p => p.department?.trim()).filter(Boolean) as string[])),
-  ).sort()
-  const members = allProfiles
+  // Team leads may only target their own department.
+  const scopedProfiles = (profilesRes.data ?? []).filter(
+    p => me.role === 'admin' || p.department === me.department,
+  )
+  const departments = me.role === 'team_lead' && me.department
+    ? [me.department]
+    : Array.from(new Set((scopedProfiles.map(p => p.department?.trim()).filter(Boolean) as string[]))).sort()
+  const members = scopedProfiles
     .filter(p => p.role !== 'admin')
     .map(p => ({ id: p.id, full_name: p.full_name, department: p.department ?? null }))
 

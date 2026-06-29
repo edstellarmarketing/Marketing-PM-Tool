@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole, canManage } from '@/lib/api'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus } from 'lucide-react'
@@ -46,17 +46,16 @@ export default async function AdminUserPage({ params, searchParams }: Props) {
   const { id } = await params
   const { tab = 'tasks' } = await searchParams
 
-  const supabase = await createClient()
-  const adminClient = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  if (adminProfile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
+  // Team leads may only open detail for their own department's members.
+  if (!(await canManage(me, id))) redirect('/dashboard')
 
+  const adminClient = createAdminClient()
   const [{ data: profile }, { data: tasks }, { data: plans }, { data: scores }, { data: userAwardsRaw }] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', id).single(),
-    supabase.from('tasks').select('*').eq('user_id', id).order('created_at', { ascending: false }),
-    supabase.from('monthly_plans').select('id, month, year').eq('user_id', id).order('year', { ascending: false }).order('month', { ascending: false }),
-    supabase.from('monthly_scores').select('*').eq('user_id', id).order('year', { ascending: false }).order('month', { ascending: false }).limit(12),
+    adminClient.from('profiles').select('*').eq('id', id).single(),
+    adminClient.from('tasks').select('*').eq('user_id', id).order('created_at', { ascending: false }),
+    adminClient.from('monthly_plans').select('id, month, year').eq('user_id', id).order('year', { ascending: false }).order('month', { ascending: false }),
+    adminClient.from('monthly_scores').select('*').eq('user_id', id).order('year', { ascending: false }).order('month', { ascending: false }).limit(12),
     adminClient.from('user_awards').select('*, award_types(id,name,icon,bonus_points)').eq('user_id', id).order('created_at', { ascending: false }),
   ])
 
@@ -64,9 +63,9 @@ export default async function AdminUserPage({ params, searchParams }: Props) {
 
   const p = profile as Profile
   const isActive = p.is_active !== false
-  const isSelf = user!.id === id
-  const updateStatusAction = updateUserAccountStatus.bind(null, user!.id, id)
-  const removeAccountAction = removeUserAccount.bind(null, user!.id, id)
+  const isSelf = me.id === id
+  const updateStatusAction = updateUserAccountStatus.bind(null, me.id, id)
+  const removeAccountAction = removeUserAccount.bind(null, me.id, id)
   const allTasks = (tasks ?? []) as Task[]
   const allPlans = (plans ?? []) as MonthlyPlan[]
   const allScores = (scores ?? []) as MonthlyScore[]
@@ -146,6 +145,7 @@ export default async function AdminUserPage({ params, searchParams }: Props) {
             isActive={isActive}
             updateStatusAction={updateStatusAction}
             removeAccountAction={removeAccountAction}
+            canRemove={me.role === 'admin'}
           />
         )}
       </div>

@@ -20,12 +20,38 @@ async function assertAdmin(adminUserId: string) {
   return { adminClient, error: null }
 }
 
+// Admins manage everyone; a team lead manages active users in their own
+// (non-null) department. Used for delegated actions (e.g. deactivate).
+async function assertManages(callerId: string, targetId: string) {
+  const adminClient = createAdminClient()
+  const { data: caller } = await adminClient
+    .from('profiles')
+    .select('id, role, is_active, department')
+    .eq('id', callerId)
+    .single()
+
+  if (!caller || caller.is_active === false) return { adminClient, error: 'Unauthorized' }
+  if (caller.role === 'admin') return { adminClient, error: null }
+
+  if (caller.role === 'team_lead' && caller.department) {
+    const { data: target } = await adminClient
+      .from('profiles')
+      .select('department')
+      .eq('id', targetId)
+      .single()
+    if (target && target.department === caller.department) return { adminClient, error: null }
+  }
+
+  return { adminClient, error: 'Unauthorized' }
+}
+
 export async function updateUserAccountStatus(
   adminUserId: string,
   userId: string,
   isActive: boolean
 ): Promise<ActionResult> {
-  const { adminClient, error } = await assertAdmin(adminUserId)
+  // Delegated: admins and managing team leads (own department) may deactivate.
+  const { adminClient, error } = await assertManages(adminUserId, userId)
   if (error) return { success: false, error }
 
   if (adminUserId === userId) {

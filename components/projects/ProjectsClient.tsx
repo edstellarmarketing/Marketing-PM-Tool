@@ -19,6 +19,8 @@ interface Props {
   projects: Project[]
   stats: Record<string, ProjectStats>
   isAdmin: boolean
+  // Who may create a project (admins + team leads). Defaults to isAdmin.
+  canCreate?: boolean
 }
 
 type ViewMode = 'cards' | 'list'
@@ -43,7 +45,7 @@ function statusPillClass(status: Project['status']) {
   }
 }
 
-export default function ProjectsClient({ projects, stats, isAdmin }: Props) {
+export default function ProjectsClient({ projects, stats, isAdmin, canCreate = isAdmin }: Props) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [domainFilter, setDomainFilter] = useState<'all' | 'none' | Project['domain']>('all')
@@ -95,7 +97,7 @@ export default function ProjectsClient({ projects, stats, isAdmin }: Props) {
               : `${filtered.length} of ${projects.length} project${projects.length === 1 ? '' : 's'}`}
           </p>
         </div>
-        {isAdmin && (
+        {canCreate && (
           <button
             onClick={() => setOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -109,13 +111,13 @@ export default function ProjectsClient({ projects, stats, isAdmin }: Props) {
       {projects.length === 0 ? (
         <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-12 text-center">
           <FolderKanban size={36} className="mx-auto text-gray-400 mb-3" />
-          <p className="text-gray-600 dark:text-gray-300 font-medium">{isAdmin ? 'No projects yet' : 'No projects assigned to you yet'}</p>
+          <p className="text-gray-600 dark:text-gray-300 font-medium">{canCreate ? 'No projects yet' : 'No projects assigned to you yet'}</p>
           <p className="text-sm text-gray-500 mt-1">
-            {isAdmin
+            {canCreate
               ? 'Create your first project to organize tasks by initiative.'
               : 'Once an admin assigns you to a project, it will show up here.'}
           </p>
-          {isAdmin && (
+          {canCreate && (
             <button
               onClick={() => setOpen(true)}
               className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"

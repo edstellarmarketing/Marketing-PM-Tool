@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead, departmentUserIds } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +24,7 @@ const createSchema = z.object({
 })
 
 export async function GET(req: NextRequest) {
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const url = new URL(req.url)
@@ -42,15 +42,17 @@ export async function GET(req: NextRequest) {
   if (dept) query = query.contains('departments', [dept])
   if (awardId) query = query.eq('award_type_id', awardId)
 
+  // Team leads manage only the announcements they created.
+  if (profile!.role === 'team_lead') query = query.eq('created_by', profile!.id)
+
   const { data, error: dbError } = await query
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
-  void profile
   return NextResponse.json(data ?? [])
 }
 
 export async function POST(req: NextRequest) {
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const body = await req.json()
@@ -59,6 +61,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
   const input = parsed.data
+
+  // Team leads may post only to their own department (department mode = exactly
+  // their dept; users mode = only their dept's members). Org-wide / multi-dept
+  // announcements stay admin-only.
+  if (profile!.role === 'team_lead') {
+    const dept = profile!.department
+    if (!dept) return NextResponse.json({ error: 'No department assigned' }, { status: 403 })
+    if (input.target_mode === 'department') {
+      if (input.departments.length !== 1 || input.departments[0] !== dept) {
+        return NextResponse.json({ error: 'Team leads can only post to their own department' }, { status: 403 })
+      }
+    } else {
+      const deptIds = new Set(await departmentUserIds(dept))
+      if (!input.user_ids.every(uid => deptIds.has(uid))) {
+        return NextResponse.json({ error: 'Team leads can only target members of their own department' }, { status: 403 })
+      }
+    }
+  }
 
   const admin = createAdminClient()
 

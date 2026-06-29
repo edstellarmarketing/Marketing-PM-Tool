@@ -11,6 +11,9 @@ const schema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params
+  // PARKED DECISION (features.md §Appraisals): publishing is kept admin-only for
+  // now. To delegate publishing to team leads for their own department, swap
+  // requireAdmin() for requireManages(userId).
   const { error } = await requireAdmin()
   if (error) return error
 

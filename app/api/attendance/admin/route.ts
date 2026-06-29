@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead, departmentUserIds } from '@/lib/api'
 
 export async function GET(req: NextRequest) {
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const { searchParams } = new URL(req.url)
@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
     .from('attendance_leaves')
     .select('*')
     .order('date', { ascending: true })
+
+  // Team leads see only their own department's leaves.
+  if (profile!.role === 'team_lead') {
+    leavesQuery = leavesQuery.in('user_id', await departmentUserIds(profile!.department))
+  }
 
   if (month && year) {
     const mNum = parseInt(month)
@@ -43,12 +48,12 @@ export async function GET(req: NextRequest) {
   const userIds = [...new Set(leaves.map((l: { user_id: string }) => l.user_id))]
   const { data: profiles, error: profilesError } = await adminClient
     .from('profiles')
-    .select('id, full_name, avatar_url')
+    .select('id, full_name, avatar_url, department')
     .in('id', userIds)
 
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
 
-  const profileMap = new Map((profiles ?? []).map((p: { id: string; full_name: string; avatar_url: string | null }) => [p.id, p]))
+  const profileMap = new Map((profiles ?? []).map((p: { id: string; full_name: string; avatar_url: string | null; department: string | null }) => [p.id, p]))
 
   const result = leaves.map((l: { user_id: string }) => ({
     ...l,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead } from '@/lib/api'
 import { z } from 'zod'
 
 const awardBonusSchema = z.object({
@@ -9,7 +9,7 @@ const awardBonusSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
@@ -24,12 +24,22 @@ export async function POST(req: NextRequest) {
 
   const adminClient = createAdminClient()
 
-  // Get all active members
-  const { data: members, error: membersError } = await adminClient
+  // Get all active members. Team leads only award their own department; a team
+  // lead with no department awards nobody.
+  let membersQuery = adminClient
     .from('profiles')
     .select('id, full_name')
     .eq('role', 'member')
     .eq('is_active', true)
+
+  if (profile.role === 'team_lead') {
+    if (!profile.department) {
+      return NextResponse.json({ awarded: 0, skipped: 0, message: 'No department assigned' })
+    }
+    membersQuery = membersQuery.eq('department', profile.department)
+  }
+
+  const { data: members, error: membersError } = await membersQuery
 
   if (membersError) return NextResponse.json({ error: membersError.message }, { status: 500 })
 

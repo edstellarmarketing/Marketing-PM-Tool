@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole } from '@/lib/api'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -10,12 +10,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function EditAnnouncementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const admin = createAdminClient()
   const [announcementRes, awardsRes, profilesRes, categoriesRes, configsRes, attachmentsRes] = await Promise.all([
@@ -32,16 +27,22 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
 
   if (!announcementRes.data) notFound()
 
+  // Team leads may only edit announcements they created.
+  if (me.role === 'team_lead' && announcementRes.data.created_by !== me.id) redirect('/dashboard')
+
   if (announcementRes.data.status === 'active') {
     // Active announcements can't be edited; bounce to detail.
     redirect(`/admin/announcements/${id}`)
   }
 
-  const allProfiles = profilesRes.data ?? []
-  const departments = Array.from(
-    new Set((allProfiles.map(p => p.department?.trim()).filter(Boolean) as string[])),
-  ).sort()
-  const members = allProfiles
+  // Team leads may only target their own department.
+  const scopedProfiles = (profilesRes.data ?? []).filter(
+    p => me.role === 'admin' || p.department === me.department,
+  )
+  const departments = me.role === 'team_lead' && me.department
+    ? [me.department]
+    : Array.from(new Set((scopedProfiles.map(p => p.department?.trim()).filter(Boolean) as string[]))).sort()
+  const members = scopedProfiles
     .filter(p => p.role !== 'admin')
     .map(p => ({ id: p.id, full_name: p.full_name, department: p.department ?? null }))
   const taskTypes = (configsRes.data ?? []).filter(c => c.category === 'task_type').map(c => c.label)

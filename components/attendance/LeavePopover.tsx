@@ -45,10 +45,12 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
     return () => document.removeEventListener('mousedown', handleClick)
   }, [onClose])
 
+  const reasonValid = note.trim().length > 0
+
   async function handleSubmit() {
-    if (!leaveType) return
+    if (!leaveType || !reasonValid) return
     setLoading(true)
-    await onAdd(leaveType, halfDay, note)
+    await onAdd(leaveType, halfDay, note.trim())
     setLoading(false)
   }
 
@@ -167,12 +169,13 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
             Half day
           </label>
 
-          <p className="text-xs text-gray-400 mb-1">2. Add a reason (optional):</p>
+          <p className="text-xs text-gray-400 mb-1">2. Add a reason <span className="text-red-500">(required)</span>:</p>
           <input
             type="text"
             value={note}
             onChange={e => setNote(e.target.value)}
             placeholder="Reason…"
+            required
             className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
           />
 
@@ -181,7 +184,8 @@ export default function LeavePopover({ date, existingLeave, onAdd, onRemove, onC
             type="button"
             onMouseDown={e => e.preventDefault()}
             onClick={handleSubmit}
-            disabled={loading || !leaveType}
+            disabled={loading || !leaveType || !reasonValid}
+            title={!reasonValid ? 'A reason is required' : undefined}
             className="flex items-center justify-center gap-1.5 w-full px-3 py-2 text-xs font-semibold text-white bg-teal-500 rounded-lg hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? <Loader2 size={12} className="animate-spin" /> : null}

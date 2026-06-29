@@ -8,9 +8,11 @@ import { PROJECT_DOMAINS, type Project, type ProjectStatus, type ProjectDomain }
 interface Props {
   project: Project
   onClose: () => void
+  // Deleting a project is admin-only; team-lead managers can edit settings but not delete.
+  canDelete?: boolean
 }
 
-export default function ProjectSettingsModal({ project, onClose }: Props) {
+export default function ProjectSettingsModal({ project, onClose, canDelete = true }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     name: project.name,
@@ -225,6 +227,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
             </label>
 
             <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              {canDelete && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -245,6 +248,7 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
                   {sendingTest === 'owner' ? 'Sending…' : 'Send test owner email to me'}
                 </button>
               </div>
+              )}
               {testStatus && (
                 <span className="text-xs text-emerald-700 dark:text-emerald-400">{testStatus}</span>
               )}
@@ -271,15 +275,17 @@ export default function ProjectSettingsModal({ project, onClose }: Props) {
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={saving || deleting}
-              className="ml-auto flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg disabled:opacity-50"
-            >
-              <Trash2 size={15} />
-              {deleting ? 'Deleting…' : 'Delete Project'}
-            </button>
+            {canDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={saving || deleting}
+                className="ml-auto flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg disabled:opacity-50"
+              >
+                <Trash2 size={15} />
+                {deleting ? 'Deleting…' : 'Delete Project'}
+              </button>
+            )}
           </div>
         </form>
       </div>

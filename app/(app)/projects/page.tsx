@@ -10,6 +10,8 @@ export default async function ProjectsPage() {
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   const isAdmin = profile?.role === 'admin'
+  // Team leads may also create projects (department-scoped); see features.md.
+  const canCreate = isAdmin || profile?.role === 'team_lead'
 
   const { data: projects } = await supabase
     .from('projects')
@@ -45,5 +47,5 @@ export default async function ProjectsPage() {
     }
   }
 
-  return <ProjectsClient projects={projectList} stats={taskStats} isAdmin={isAdmin} />
+  return <ProjectsClient projects={projectList} stats={taskStats} isAdmin={isAdmin} canCreate={canCreate} />
 }

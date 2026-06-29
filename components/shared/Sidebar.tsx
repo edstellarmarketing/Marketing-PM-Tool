@@ -7,49 +7,64 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import type { Role } from '@/types'
 
 interface NavItem {
   href: string
   label: string
   icon: React.ReactNode
-  adminOnly?: boolean
-  memberOnly?: boolean
+  // Roles allowed to see this item. Omit = visible to everyone.
+  roles?: Role[]
+  // 'manage' items are grouped under a heading for admins / team leads.
+  section?: 'manage'
 }
 
+const MANAGER: Role[] = ['admin', 'team_lead']
+
 const navItems: NavItem[] = [
+  // Personal / shared
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
   { href: '/projects', label: 'Projects', icon: <FolderKanban size={18} /> },
-  { href: '/admin/all-tasks', label: 'All Tasks', icon: <ListChecks size={18} />, adminOnly: true },
-  { href: '/admin/monthly-tasks', label: 'Monthly Tasks', icon: <CalendarRange size={18} />, adminOnly: true },
-  { href: '/user/monthly-tasks', label: 'Monthly Tasks', icon: <CalendarRange size={18} />, memberOnly: true },
-  { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} />, adminOnly: true },
-  { href: '/announcements', label: 'Announcements', icon: <Megaphone size={18} />, memberOnly: true },
-  { href: '/tasks', label: 'My Tasks', icon: <CheckSquare size={18} />, memberOnly: true },
-  { href: '/notes', label: 'Meeting Notes', icon: <NotebookPen size={18} />, memberOnly: true },
-  { href: '/attendance', label: 'Attendance', icon: <CalendarCheck size={18} />, memberOnly: true },
+  { href: '/tasks', label: 'My Tasks', icon: <CheckSquare size={18} />, roles: ['member', 'team_lead'] },
+  { href: '/user/monthly-tasks', label: 'Monthly Tasks', icon: <CalendarRange size={18} />, roles: ['member', 'team_lead'] },
+  { href: '/notes', label: 'Meeting Notes', icon: <NotebookPen size={18} />, roles: ['member', 'team_lead'] },
+  { href: '/attendance', label: 'Attendance', icon: <CalendarCheck size={18} />, roles: ['member', 'team_lead'] },
+  { href: '/announcements', label: 'Announcements', icon: <Megaphone size={18} />, roles: ['member'] },
   { href: '/leaderboard', label: 'Leaderboard', icon: <Trophy size={18} /> },
-  { href: '/performance', label: 'My Performance', icon: <Award size={18} />, memberOnly: true },
-  { href: '/profile', label: 'My Profile', icon: <UserCircle size={18} /> },
-  { href: '/admin', label: 'Admin', icon: <Users size={18} />, adminOnly: true },
+  { href: '/performance', label: 'My Performance', icon: <Award size={18} />, roles: ['member', 'team_lead'] },
   { href: '/admin/pending-approvals', label: 'Pending Approvals', icon: <ClipboardCheck size={18} /> },
-  { href: '/admin/attendance', label: 'Attendance', icon: <CalendarCheck size={18} />, adminOnly: true },
-  { href: '/admin/appraisals', label: 'Appraisals', icon: <FileText size={18} />, adminOnly: true },
-  { href: '/admin/settings', label: 'Point Settings', icon: <Settings size={18} />, adminOnly: true },
-  { href: '/admin/email-settings', label: 'Email Settings', icon: <Mail size={18} />, adminOnly: true },
+  { href: '/profile', label: 'My Profile', icon: <UserCircle size={18} /> },
+
+  // Management (admins + team leads, except where marked admin-only)
+  { href: '/admin/all-tasks', label: 'All Tasks', icon: <ListChecks size={18} />, roles: ['admin'], section: 'manage' },
+  { href: '/admin/monthly-tasks', label: 'Team Monthly Tasks', icon: <CalendarRange size={18} />, roles: MANAGER, section: 'manage' },
+  { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} />, roles: MANAGER, section: 'manage' },
+  { href: '/admin/attendance', label: 'Team Attendance', icon: <CalendarCheck size={18} />, roles: MANAGER, section: 'manage' },
+  { href: '/admin/appraisals', label: 'Appraisals', icon: <FileText size={18} />, roles: MANAGER, section: 'manage' },
+  { href: '/admin', label: 'Users', icon: <Users size={18} />, roles: MANAGER, section: 'manage' },
+  { href: '/admin/settings', label: 'Point Settings', icon: <Settings size={18} />, roles: ['admin'], section: 'manage' },
+  { href: '/admin/email-settings', label: 'Email Settings', icon: <Mail size={18} />, roles: ['admin'], section: 'manage' },
 ]
 
 interface SidebarProps {
-  role: 'admin' | 'member'
+  role: Role
+  department?: string | null
   fullName: string
   designation?: string | null
   avatarUrl?: string | null
+}
+
+const ROLE_BADGE: Record<Role, { label: string; className: string }> = {
+  admin:     { label: 'admin',     className: 'bg-purple-600 text-white' },
+  team_lead: { label: 'team lead', className: 'bg-teal-600 text-white' },
+  member:    { label: 'member',    className: 'bg-blue-600 text-white' },
 }
 
 function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-export default function Sidebar({ role, fullName, designation, avatarUrl }: SidebarProps) {
+export default function Sidebar({ role, department, fullName, designation, avatarUrl }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -60,10 +75,11 @@ export default function Sidebar({ role, fullName, designation, avatarUrl }: Side
     router.push('/login')
   }
 
-  const visible = navItems.filter(item =>
-    (!item.adminOnly || role === 'admin') &&
-    (!item.memberOnly || role !== 'admin')
-  )
+  const visible = navItems.filter(item => !item.roles || item.roles.includes(role))
+  const mainItems = visible.filter(item => item.section !== 'manage')
+  const manageItems = visible.filter(item => item.section === 'manage')
+  const badge = ROLE_BADGE[role]
+  const badgeLabel = role === 'team_lead' && department ? `${badge.label} · ${department}` : badge.label
 
   const SidebarContent = () => (
     <>
@@ -86,16 +102,35 @@ export default function Sidebar({ role, fullName, designation, avatarUrl }: Side
             {designation && <p className="text-xs text-gray-400 truncate">{designation}</p>}
           </div>
         </Link>
-        <span className={cn(
-          'text-xs px-2 py-0.5 rounded-full mt-2 inline-block',
-          role === 'admin' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
-        )}>
-          {role}
+        <span className={cn('text-xs px-2 py-0.5 rounded-full mt-2 inline-block', badge.className)}>
+          {badgeLabel}
         </span>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {visible.map(item => (
+        {mainItems.map(item => (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+              pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/'))
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            )}
+          >
+            {item.icon}
+            {item.label}
+          </Link>
+        ))}
+
+        {manageItems.length > 0 && (
+          <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+            {role === 'team_lead' ? 'Team' : 'Manage'}
+          </p>
+        )}
+        {manageItems.map(item => (
           <Link
             key={item.href}
             href={item.href}

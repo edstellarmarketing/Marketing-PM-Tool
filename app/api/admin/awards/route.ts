@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdminOrTeamLead, departmentUserIds, canManage } from '@/lib/api'
 
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { profile, error: authError } = await requireAdminOrTeamLead()
+  if (authError) return authError
 
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('user_awards')
     .select('*, award_types(id,name,icon,bonus_points)')
     .order('created_at', { ascending: false })
+
+  // Team leads see only awards granted to their own department's members.
+  if (profile!.role === 'team_lead') {
+    query = query.in('user_id', await departmentUserIds(profile!.department))
+  }
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -33,16 +37,19 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (adminProfile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { profile, error: authError } = await requireAdminOrTeamLead()
+  if (authError) return authError
+  const user = { id: profile!.id }
 
   const body = await req.json()
   const { user_id, award_type_id, task_id, note, month, year } = body
   if (!user_id || !award_type_id || !month || !year) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  // Team leads may only grant awards to their own department's members.
+  if (!(await canManage(profile!, user_id))) {
+    return NextResponse.json({ error: 'You can only grant awards to members of your department' }, { status: 403 })
   }
 
   const admin = createAdminClient()
