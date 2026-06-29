@@ -17,7 +17,10 @@ interface Props {
   tasks: ProjectTask[]
   owners: ProjectOwner[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
+  // isAdmin here means "can manage this project" (admin or team-lead creator) —
+  // it gates all project-management UI. canDelete is true admins only.
   isAdmin: boolean
+  canDelete?: boolean
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
@@ -59,7 +62,7 @@ const priorityStyle: Record<string, string> = {
   critical: 'text-red-600',
 }
 
-export default function ProjectDashboard({ project, tasks, owners, allMembers, isAdmin }: Props) {
+export default function ProjectDashboard({ project, tasks, owners, allMembers, isAdmin, canDelete = isAdmin }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
@@ -916,6 +919,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
       {settingsOpen && (
         <ProjectSettingsModal
           project={project}
+          canDelete={canDelete}
           onClose={() => setSettingsOpen(false)}
         />
       )}

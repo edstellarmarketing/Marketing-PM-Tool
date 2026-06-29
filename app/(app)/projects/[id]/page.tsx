@@ -20,6 +20,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   if (!project) notFound()
 
+  // A team lead manages projects they created — same project powers as an admin,
+  // except deleting the project (admin-only).
+  const canManage = isAdmin || (profile?.role === 'team_lead' && project.created_by === user.id)
+
   // PostgREST caps a single response at 1000 rows. Page through so projects
   // with more than 1000 tasks render fully.
   const tasksPromise = (async (): Promise<ProjectTask[]> => {
@@ -74,7 +78,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       tasks={tasks}
       owners={ownersWithMembers}
       allMembers={allMembers}
-      isAdmin={isAdmin}
+      isAdmin={canManage}
+      canDelete={isAdmin}
     />
   )
 }

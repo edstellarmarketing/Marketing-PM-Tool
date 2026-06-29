@@ -10,9 +10,11 @@ interface Props {
   isActive: boolean
   updateStatusAction: (isActive: boolean) => Promise<ActionResult>
   removeAccountAction: () => Promise<ActionResult>
+  // Removing a user is admin-only; team leads may deactivate but not delete.
+  canRemove?: boolean
 }
 
-export default function UserAccountActions({ isActive, updateStatusAction, removeAccountAction }: Props) {
+export default function UserAccountActions({ isActive, updateStatusAction, removeAccountAction, canRemove = true }: Props) {
   const router = useRouter()
   const [loadingAction, setLoadingAction] = useState<'status' | 'delete' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,15 +66,17 @@ export default function UserAccountActions({ isActive, updateStatusAction, remov
           {isActive ? <UserX size={15} /> : <UserCheck size={15} />}
           {loadingAction === 'status' ? 'Saving...' : isActive ? 'Deactivate' : 'Reactivate'}
         </button>
-        <button
-          type="button"
-          onClick={removeAccount}
-          disabled={loadingAction !== null}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-sm font-medium text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
-        >
-          <Trash2 size={15} />
-          {loadingAction === 'delete' ? 'Removing...' : 'Remove'}
-        </button>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={removeAccount}
+            disabled={loadingAction !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-sm font-medium text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            <Trash2 size={15} />
+            {loadingAction === 'delete' ? 'Removing...' : 'Remove'}
+          </button>
+        )}
       </div>
       {error && <p className="max-w-xs text-right text-xs text-red-600">{error}</p>}
     </div>

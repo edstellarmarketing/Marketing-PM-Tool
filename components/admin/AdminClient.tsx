@@ -15,18 +15,50 @@ interface Props {
   users: UserWithEmail[]
   departments: Category[]
   currentUserId: string
+  // Admins get full controls (invite, role/department editing, remove,
+  // department management). Team leads get a read-only, department-scoped roster.
+  isAdmin?: boolean
+}
+
+const ROLE_BADGE_CLASS: Record<string, string> = {
+  admin: 'bg-purple-100 text-purple-700',
+  team_lead: 'bg-teal-100 text-teal-700',
+  member: 'bg-blue-100 text-blue-700',
+}
+
+function roleLabel(role: string) {
+  return role === 'team_lead' ? 'team lead' : role
 }
 
 function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-export default function AdminClient({ users: initialUsers, departments: initialDepts, currentUserId }: Props) {
+export default function AdminClient({ users: initialUsers, departments: initialDepts, currentUserId, isAdmin = true }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'users' | 'departments'>('users')
   const [showInvite, setShowInvite] = useState(false)
   const [users, setUsers] = useState(initialUsers)
   const [departments, setDepartments] = useState(initialDepts)
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  // Admin-only: patch a user's role or department inline.
+  async function updateUserField(userId: string, patch: { role?: string; department?: string | null }) {
+    setSavingId(userId)
+    setUserError(null)
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    setSavingId(null)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setUserError(data.error ?? 'Failed to update user')
+    } else {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...patch } as UserWithEmail : u))
+    }
+  }
 
   // User management state
   const [resetingId, setResetingId] = useState<string | null>(null)
@@ -130,7 +162,7 @@ export default function AdminClient({ users: initialUsers, departments: initialD
 
   const tabs = [
     { key: 'users' as const, label: 'User Management', icon: <Users size={16} /> },
-    { key: 'departments' as const, label: 'Department Management', icon: <Building2 size={16} /> },
+    ...(isAdmin ? [{ key: 'departments' as const, label: 'Department Management', icon: <Building2 size={16} /> }] : []),
   ]
 
   return (
@@ -156,13 +188,15 @@ export default function AdminClient({ users: initialUsers, departments: initialD
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">{users.length} user{users.length !== 1 ? 's' : ''}</p>
-            <button
-              onClick={() => setShowInvite(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <UserPlus size={15} />
-              Invite User
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowInvite(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <UserPlus size={15} />
+                Invite User
+              </button>
+            )}
           </div>
 
           {userError && (
@@ -204,13 +238,38 @@ export default function AdminClient({ users: initialUsers, departments: initialD
                         </div>
                       </Link>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{u.department ?? '—'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {isAdmin && u.id !== currentUserId ? (
+                        <select
+                          value={u.department ?? ''}
+                          disabled={savingId === u.id}
+                          onChange={e => updateUserField(u.id, { department: e.target.value || null })}
+                          className="text-sm border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                        >
+                          <option value="">—</option>
+                          {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                        </select>
+                      ) : (
+                        u.department ?? '—'
+                      )}
+                    </td>
                     <td className="py-3 px-4">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {u.role}
-                      </span>
+                      {isAdmin && u.id !== currentUserId ? (
+                        <select
+                          value={u.role}
+                          disabled={savingId === u.id}
+                          onChange={e => updateUserField(u.id, { role: e.target.value })}
+                          className="text-sm border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                        >
+                          <option value="member">member</option>
+                          <option value="team_lead">team lead</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      ) : (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_BADGE_CLASS[u.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {roleLabel(u.role)}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -221,7 +280,9 @@ export default function AdminClient({ users: initialUsers, departments: initialD
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-500">{u.email ?? '—'}</td>
                     <td className="py-3 px-4">
-                      {u.id !== currentUserId ? (
+                      {!isAdmin ? (
+                        <Link href={`/admin/users/${u.id}`} className="text-xs text-blue-600 hover:underline block text-right">View →</Link>
+                      ) : u.id !== currentUserId ? (
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => sendResetLink(u.email, u.id)}

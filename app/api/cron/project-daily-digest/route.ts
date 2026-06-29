@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   // Pull projects where EITHER flag is on; per-section gating below
   const { data: projects, error: projectsErr } = await admin
     .from('projects')
-    .select('id, name, domain, start_date, end_date, notify_email_enabled, notify_owner_email_enabled')
+    .select('id, name, domain, start_date, end_date, notify_email_enabled, notify_owner_email_enabled, created_by')
     .or('notify_email_enabled.eq.true,notify_owner_email_enabled.eq.true')
     .neq('status', 'archived')
     .order('created_at', { ascending: false })
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     admin.auth.admin.listUsers({ perPage: 500 }),
   ])
 
-  const profileById: Record<string, { full_name: string; role: 'admin' | 'member'; is_active: boolean }> =
+  const profileById: Record<string, { full_name: string; role: 'admin' | 'team_lead' | 'member'; is_active: boolean }> =
     Object.fromEntries((profiles ?? []).map(p => [p.id, p]))
   const emailById: Record<string, string> = {}
   for (const u of authUsers ?? []) {
@@ -147,7 +147,14 @@ export async function GET(req: NextRequest) {
         today,
       })
       if (digestData.total > 0) {
-        for (const a of adminProfiles) {
+        // Recipients: all admins + the project's managing team lead (its creator).
+        const recipients: Array<{ id: string; full_name: string }> = adminProfiles.map(a => ({ id: a.id, full_name: a.full_name }))
+        const creatorId = project.created_by
+        const creator = creatorId ? profileById[creatorId] : null
+        if (creatorId && creator?.is_active && creator.role === 'team_lead' && !recipients.some(r => r.id === creatorId)) {
+          recipients.push({ id: creatorId, full_name: creator.full_name })
+        }
+        for (const a of recipients) {
           const email = emailById[a.id]
           if (!email) continue
           const html = adminProjectDigestEmailHtml({

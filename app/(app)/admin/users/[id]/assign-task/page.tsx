@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { requirePageRole, canManage } from '@/lib/api'
 import { redirect, notFound } from 'next/navigation'
 import AssignTaskForm from '@/components/admin/AssignTaskForm'
 
@@ -8,12 +9,11 @@ interface Props {
 
 export default async function AssignTaskPage({ params }: Props) {
   const { id } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const me = await requirePageRole(['admin', 'team_lead'])
+  // Team leads may only assign to their own department's members.
+  if (!(await canManage(me, id))) redirect('/dashboard')
 
-  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (adminProfile?.role !== 'admin') redirect('/dashboard')
+  const supabase = await createClient()
 
   const [{ data: targetProfile }, { data: categories }] = await Promise.all([
     supabase.from('profiles').select('id, full_name, avatar_url, is_active').eq('id', id).single(),

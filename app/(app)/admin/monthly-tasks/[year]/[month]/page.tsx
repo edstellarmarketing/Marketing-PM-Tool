@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { notFound, redirect } from 'next/navigation'
+import { requirePageRole } from '@/lib/api'
+import { notFound } from 'next/navigation'
 import MonthDetailClient from '@/components/admin/MonthDetailClient'
 
 const MIN_YEAR = 2026
@@ -29,24 +29,22 @@ export default async function MonthDetailPage({ params }: { params: Promise<{ ye
   const month = Number(monthStr)
   if (!isMonthAllowed(year, month)) notFound()
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const adminClient = createAdminClient()
   const startOfMonth = `${year}-${pad2(month)}-01`
   const endOfMonth = `${year}-${pad2(month)}-${pad2(lastDayOfMonth(year, month))}`
 
+  let membersQuery = adminClient
+    .from('profiles')
+    .select('id, full_name, avatar_url, department')
+    .eq('role', 'member')
+    .eq('is_active', true)
+    .order('full_name')
+  if (me.role === 'team_lead') membersQuery = membersQuery.eq('department', me.department ?? '__none__')
+
   const [{ data: members }, { data: monthTasks }] = await Promise.all([
-    adminClient
-      .from('profiles')
-      .select('id, full_name, avatar_url, department')
-      .eq('role', 'member')
-      .eq('is_active', true)
-      .order('full_name'),
+    membersQuery,
     adminClient
       .from('tasks')
       .select('user_id, status')

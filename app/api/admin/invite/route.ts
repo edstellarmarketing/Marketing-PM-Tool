@@ -7,7 +7,7 @@ import { z } from 'zod'
 const schema = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
-  role: z.enum(['admin', 'member']).default('member'),
+  role: z.enum(['admin', 'team_lead', 'member']).default('member'),
   department: z.string().optional(),
   designation: z.string().optional(),
 })

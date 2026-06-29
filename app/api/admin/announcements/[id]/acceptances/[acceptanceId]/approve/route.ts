@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; acceptanceId: string }> },
 ) {
   const { id, acceptanceId } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const admin = createAdminClient()
@@ -31,6 +31,10 @@ export async function POST(
   ])
 
   if (!announcement) return NextResponse.json({ error: 'Announcement not found' }, { status: 404 })
+  // Team leads may approve acceptances only on announcements they created.
+  if (profile!.role !== 'admin' && announcement.created_by !== profile!.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   if (!acceptance || acceptance.announcement_id !== id) {
     return NextResponse.json({ error: 'Acceptance row not found' }, { status: 404 })
   }
@@ -108,10 +112,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; acceptanceId: string }> },
 ) {
   const { id, acceptanceId } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const admin = createAdminClient()
+
+  // Team leads may reject acceptances only on announcements they created.
+  const { data: announcement } = await admin.from('announcements').select('created_by').eq('id', id).single()
+  if (!announcement) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (profile!.role !== 'admin' && announcement.created_by !== profile!.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { data: acceptance } = await admin
     .from('announcement_acceptances')

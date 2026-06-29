@@ -4,7 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 
 const patchSchema = z.object({
-  is_active: z.boolean(),
+  is_active: z.boolean().optional(),
+  role: z.enum(['admin', 'team_lead', 'member']).optional(),
+  department: z.string().max(60).nullable().optional(),
+}).refine(d => d.is_active !== undefined || d.role !== undefined || d.department !== undefined, {
+  message: 'No changes provided',
 })
 
 interface Props {
@@ -16,13 +20,17 @@ export async function PATCH(req: NextRequest, { params }: Props) {
   if (error) return error
 
   const { id } = await params
-  if (adminProfile?.id === id) {
-    return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 })
-  }
-
   const body = await req.json()
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+
+  const isSelf = adminProfile?.id === id
+  if (isSelf && parsed.data.is_active === false) {
+    return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 })
+  }
+  if (isSelf && parsed.data.role && parsed.data.role !== 'admin') {
+    return NextResponse.json({ error: 'You cannot change your own role' }, { status: 400 })
+  }
 
   const adminClient = createAdminClient()
   const { data: existingProfile, error: findError } = await adminClient
@@ -35,15 +43,22 @@ export async function PATCH(req: NextRequest, { params }: Props) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  const { error: authError } = await adminClient.auth.admin.updateUserById(id, {
-    ban_duration: parsed.data.is_active ? 'none' : '876000h',
-  })
+  // Only touch the auth ban state when activation status is being changed.
+  if (parsed.data.is_active !== undefined) {
+    const { error: authError } = await adminClient.auth.admin.updateUserById(id, {
+      ban_duration: parsed.data.is_active ? 'none' : '876000h',
+    })
+    if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+  }
 
-  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+  const updates: Record<string, unknown> = {}
+  if (parsed.data.is_active !== undefined) updates.is_active = parsed.data.is_active
+  if (parsed.data.role !== undefined) updates.role = parsed.data.role
+  if (parsed.data.department !== undefined) updates.department = parsed.data.department
 
   const { error: profileError } = await adminClient
     .from('profiles')
-    .update({ is_active: parsed.data.is_active })
+    .update(updates)
     .eq('id', id)
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 })

@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole, canManage } from '@/lib/api'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -28,10 +28,9 @@ function ratingBand(avg: number): { label: string; color: string } {
 export default async function AppraisalDetailPage({ params, searchParams }: Props) {
   const { userId } = await params
   const { fy: fyParam } = await searchParams
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  if (adminProfile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
+  // Team leads may only open appraisals for their own department's members.
+  if (!(await canManage(me, userId))) redirect('/dashboard')
 
   const currentFy = getCurrentFinancialYear()
   const fy = fyParam ?? currentFy
@@ -46,11 +45,11 @@ export default async function AppraisalDetailPage({ params, searchParams }: Prop
   const fyEnd   = `${fyEndYear}-03-31`
 
   const [{ data: profile }, { data: allSnapshots }, { data: monthlyStats }, { data: categoryStats }, { data: allTasks }, { data: fyAwardsRaw }, { data: fyAttendanceLeaves }] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', userId).single(),
-    supabase.from('appraisal_snapshots').select('*').eq('user_id', userId).order('financial_year', { ascending: false }),
-    supabase.from('monthly_scores').select('*').eq('user_id', userId).order('year').order('month'),
-    supabase.rpc('get_annual_category_stats', { p_user_id: userId, p_financial_year: fy }),
-    supabase.from('tasks').select('id,task_type,complexity,status,due_date,created_at').eq('user_id', userId).eq('is_draft', false),
+    adminClient.from('profiles').select('*').eq('id', userId).single(),
+    adminClient.from('appraisal_snapshots').select('*').eq('user_id', userId).order('financial_year', { ascending: false }),
+    adminClient.from('monthly_scores').select('*').eq('user_id', userId).order('year').order('month'),
+    adminClient.rpc('get_annual_category_stats', { p_user_id: userId, p_financial_year: fy }),
+    adminClient.from('tasks').select('id,task_type,complexity,status,due_date,created_at').eq('user_id', userId).eq('is_draft', false),
     adminClient
       .from('user_awards')
       .select('*, award_types(id,name,icon,bonus_points)')

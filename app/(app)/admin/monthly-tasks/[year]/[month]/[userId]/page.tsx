@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole, canManage } from '@/lib/api'
 import { notFound, redirect } from 'next/navigation'
 import MonthUserClient, { type MonthlyTaskRow, type MonthlyScoreSummary, type MonthAwardRow } from '@/components/admin/MonthUserClient'
 
@@ -28,12 +28,9 @@ export default async function MonthUserPage({ params }: { params: Promise<{ year
   const month = Number(monthStr)
   if (!isMonthAllowed(year, month)) notFound()
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
+  // Team leads may only open a member of their own department.
+  if (!(await canManage(me, userId))) redirect('/dashboard')
 
   const adminClient = createAdminClient()
   const startOfMonth = `${year}-${pad2(month)}-01`

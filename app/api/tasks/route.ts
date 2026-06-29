@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAuthUser } from '@/lib/api'
+import { getAuthUser, getProfile, canManage } from '@/lib/api'
 import { z } from 'zod'
 
 const subTaskSchema = z.object({
@@ -94,21 +94,22 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient()
 
-  // Admin can assign tasks to other users; regular users can only create for themselves.
+  // Admins assign to anyone; team leads assign to members of their own
+  // department; regular members can only create for themselves.
   let targetUserId = user!.id
-  let isAdminAssigning = false
+  let isAssigningToOther = false
   if (parsed.data.user_id && parsed.data.user_id !== user!.id) {
-    const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-    if (adminProfile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Only admins can assign tasks to other users' }, { status: 403 })
+    const callerProfile = await getProfile(user!.id)
+    if (!callerProfile || !(await canManage(callerProfile, parsed.data.user_id))) {
+      return NextResponse.json({ error: 'You can only assign tasks to members of your department' }, { status: 403 })
     }
     targetUserId = parsed.data.user_id
-    isAdminAssigning = true
+    isAssigningToOther = true
   }
 
-  // When admin is assigning to another user, use the admin client to bypass RLS
+  // When assigning to another user, use the admin client to bypass RLS
   const adminClient = createAdminClient()
-  const insertClient = isAdminAssigning ? adminClient : supabase
+  const insertClient = isAssigningToOther ? adminClient : supabase
 
   const { user_id: _userId, dependencies, ...rest } = parsed.data
   const { data: mainTask, error: dbError } = await insertClient
@@ -117,8 +118,8 @@ export async function POST(req: NextRequest) {
       ...rest,
       user_id: targetUserId,
       approval_status: 'approved',
-      assigned_by: isAdminAssigning ? user!.id : null,
-      scoring_locked: isAdminAssigning,
+      assigned_by: isAssigningToOther ? user!.id : null,
+      scoring_locked: isAssigningToOther,
     })
     .select()
     .single()

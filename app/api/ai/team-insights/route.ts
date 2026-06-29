@@ -1,21 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdminOrTeamLead, departmentUserIds } from '@/lib/api'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { chatCompletion } from '@/lib/openrouter'
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
-  const supabase = await createClient()
+  // Team leads get insights scoped to their own department.
+  const deptIds = profile!.role === 'team_lead' ? await departmentUserIds(profile!.department) : null
+
+  const supabase = createAdminClient()
   const now = new Date()
   const month = now.getMonth() + 1
   const year = now.getFullYear()
 
+  let scoresQuery = supabase.from('monthly_scores').select('*, profiles(full_name, department)').eq('month', month).eq('year', year)
+  let blockedQuery = supabase.from('tasks').select('title, user_id, profiles(full_name)').eq('status', 'blocked')
+  let profilesQuery = supabase.from('profiles').select('id, full_name, department')
+  if (deptIds) {
+    scoresQuery = scoresQuery.in('user_id', deptIds)
+    blockedQuery = blockedQuery.in('user_id', deptIds)
+    profilesQuery = profilesQuery.eq('department', profile!.department!)
+  }
+
   const [{ data: scores }, { data: blockedTasks }, { data: profiles }] = await Promise.all([
-    supabase.from('monthly_scores').select('*, profiles(full_name, department)').eq('month', month).eq('year', year),
-    supabase.from('tasks').select('title, user_id, profiles(full_name)').eq('status', 'blocked'),
-    supabase.from('profiles').select('id, full_name, department'),
+    scoresQuery,
+    blockedQuery,
+    profilesQuery,
   ])
 
   const memberData = (scores ?? []).map((s: Record<string, unknown>) => ({

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead, departmentUserIds } from '@/lib/api'
 
 export async function GET(req: NextRequest) {
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const { searchParams } = new URL(req.url)
@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
     .from('attendance_leaves')
     .select('*')
     .order('date', { ascending: true })
+
+  // Team leads see only their own department's leaves.
+  if (profile!.role === 'team_lead') {
+    leavesQuery = leavesQuery.in('user_id', await departmentUserIds(profile!.department))
+  }
 
   if (month && year) {
     const mNum = parseInt(month)

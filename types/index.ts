@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'member'
+export type Role = 'admin' | 'team_lead' | 'member'
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
 

@@ -1,6 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { redirect } from 'next/navigation'
+import { requirePageRole } from '@/lib/api'
 import MonthlyTasksClient from '@/components/admin/MonthlyTasksClient'
 
 const MIN_YEAR = 2026
@@ -12,23 +11,22 @@ function monthKeyOf(dateStr: string): string {
 }
 
 export default async function MonthlyTasksPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const adminClient = createAdminClient()
   const minDate = `${MIN_YEAR}-${String(MIN_MONTH).padStart(2, '0')}-01`
 
+  // Team leads see only their own department's members.
+  let membersQuery = adminClient
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .eq('role', 'member')
+    .eq('is_active', true)
+    .order('full_name')
+  if (me.role === 'team_lead') membersQuery = membersQuery.eq('department', me.department ?? '__none__')
+
   const [{ data: members }, { data: monthlyTaskRows }] = await Promise.all([
-    adminClient
-      .from('profiles')
-      .select('id, full_name, avatar_url')
-      .eq('role', 'member')
-      .eq('is_active', true)
-      .order('full_name'),
+    membersQuery,
     adminClient
       .from('tasks')
       .select('user_id, due_date')

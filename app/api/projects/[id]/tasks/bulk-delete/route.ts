@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { requireAdmin } from '@/lib/api'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdminOrTeamLead, canManageProject } from '@/lib/api'
 
 const bodySchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
@@ -9,14 +9,17 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManageProject(profile, projectId))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const body = await req.json()
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { error: dbError, count } = await supabase
     .from('project_tasks')
     .delete({ count: 'exact' })

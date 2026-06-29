@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole } from '@/lib/api'
 import Link from 'next/link'
 import { getCurrentFinancialYear } from '@/lib/utils'
 import type { Profile, AppraisalSnapshot } from '@/types'
@@ -13,15 +13,18 @@ function ratingBand(rate: number): { label: string; color: string } {
 }
 
 export default async function AppraisalsListPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  if (adminProfile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const fy = getCurrentFinancialYear()
 
+  // Service-role read (RLS would block cross-user snapshot reads); team leads
+  // are scoped to their own department.
+  const supabase = createAdminClient()
+  let profilesQuery = supabase.from('profiles').select('*').order('full_name')
+  if (me.role === 'team_lead') profilesQuery = profilesQuery.eq('department', me.department ?? '__none__')
+
   const [{ data: profiles }, { data: snapshots }] = await Promise.all([
-    supabase.from('profiles').select('*').order('full_name'),
+    profilesQuery,
     supabase.from('appraisal_snapshots').select('*').eq('financial_year', fy),
   ])
 

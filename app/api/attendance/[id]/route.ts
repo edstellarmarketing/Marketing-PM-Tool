@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAuthUser, requireAdmin } from '@/lib/api'
+import { getAuthUser, requireAdminOrTeamLead, canManage } from '@/lib/api'
 import { z } from 'zod'
 
 const updateStatusSchema = z.object({
@@ -10,7 +10,7 @@ const updateStatusSchema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const body = await req.json()
@@ -18,6 +18,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
   const adminClient = createAdminClient()
+
+  // A team lead may only act on leaves of their own department's members.
+  const { data: leave } = await adminClient.from('attendance_leaves').select('user_id').eq('id', id).single()
+  if (!leave) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManage(profile!, leave.user_id))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data, error: dbError } = await adminClient
     .from('attendance_leaves')
     .update({ status: parsed.data.status })

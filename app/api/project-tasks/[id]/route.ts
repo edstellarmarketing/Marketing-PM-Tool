@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUser, requireAdmin } from '@/lib/api'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getAuthUser, getProfile, requireAdminOrTeamLead, canManageProject } from '@/lib/api'
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -36,8 +37,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     payload.dependency_owner_id = arr && arr.length > 0 ? arr[0] : null
   }
 
-  const supabase = await createClient()
-  const { data, error: dbError } = await supabase
+  // Who may edit a project task: the task's assignee or creator (their own work),
+  // admins, or a team lead managing the parent project. Project managers edit via
+  // the service-role client (RLS only permits assignee/creator/admin); everyone
+  // else still goes through RLS so they can only touch their own rows.
+  const admin = createAdminClient()
+  const { data: taskRow } = await admin
+    .from('project_tasks')
+    .select('project_id, created_by, assignee_id')
+    .eq('id', id)
+    .single()
+  if (!taskRow) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const profile = await getProfile(user.id)
+  const isManager = !!profile && await canManageProject(profile, taskRow.project_id)
+  const isOwnRow = taskRow.created_by === user.id || taskRow.assignee_id === user.id
+  if (!isManager && !isOwnRow) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const client = isManager ? admin : await createClient()
+  const { data, error: dbError } = await client
     .from('project_tasks')
     .update(payload)
     .eq('id', id)
@@ -50,10 +70,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
+
+  // Team leads may delete project tasks only within a project they created.
+  const { data: row } = await supabase.from('project_tasks').select('project_id').eq('id', id).single()
+  if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManageProject(profile, row.project_id))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error: dbError } = await supabase.from('project_tasks').delete().eq('id', id)
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
   return NextResponse.json({ success: true })

@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requirePageRole } from '@/lib/api'
 import { redirect, notFound } from 'next/navigation'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import RewardStrip from '@/components/announcements/RewardStrip'
@@ -17,12 +17,7 @@ function formatDate(d: string): string {
 
 export default async function AnnouncementDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') redirect('/dashboard')
+  const me = await requirePageRole(['admin', 'team_lead'])
 
   const admin = createAdminClient()
   const [annRes, annAttRes, acceptancesRes] = await Promise.all([
@@ -36,6 +31,8 @@ export default async function AnnouncementDetailPage({ params }: { params: Promi
   ])
   if (!annRes.data) notFound()
   const a = annRes.data
+  // Team leads may only view announcements they created.
+  if (me.role === 'team_lead' && a.created_by !== me.id) redirect('/dashboard')
 
   // Build the "member roster" relevant to this announcement:
   //   • target_mode='users'      → just the tagged users

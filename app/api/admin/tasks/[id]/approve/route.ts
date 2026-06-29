@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin, getAuthUser } from '@/lib/api'
+import { requireAdminOrTeamLead, canManage } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 
@@ -10,15 +10,22 @@ const schema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
-  const { user } = await getAuthUser()
+  const user = { id: profile!.id }
   const body = await req.json()
   const parsed = schema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
   const admin = createAdminClient()
+
+  // A team lead may only approve tasks owned by members of their department.
+  const { data: taskOwner } = await admin.from('tasks').select('user_id').eq('id', id).single()
+  if (!taskOwner) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+  if (!(await canManage(profile!, taskOwner.user_id))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const isApproved = parsed.data.action === 'approved'
 

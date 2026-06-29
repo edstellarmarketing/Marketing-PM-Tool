@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/api'
+import { requireAdminOrTeamLead } from '@/lib/api'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ANNOUNCEMENT_BUCKET, deleteAttachmentObject } from '@/lib/attachments'
 
@@ -10,13 +10,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; attachmentId: string }> },
 ) {
   const { id, attachmentId } = await params
-  const { profile, error } = await requireAdmin()
+  const { profile, error } = await requireAdminOrTeamLead()
   if (error) return error
 
   const admin = createAdminClient()
   const { data: row } = await admin
     .from('announcement_attachments')
-    .select('id, announcement_id, storage_path, uploaded_by, announcements(status)')
+    .select('id, announcement_id, storage_path, uploaded_by, announcements(status, created_by)')
     .eq('id', attachmentId)
     .single()
 
@@ -24,7 +24,13 @@ export async function DELETE(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const parentStatus = (row as unknown as { announcements: { status: string } | null }).announcements?.status
+  const parent = (row as unknown as { announcements: { status: string; created_by: string } | null }).announcements
+  // Team leads may only touch attachments on announcements they created.
+  if (profile!.role !== 'admin' && parent?.created_by !== profile!.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const parentStatus = parent?.status
   const isOwn = row.uploaded_by === profile!.id
   const isOpenParent = parentStatus === 'open'
 

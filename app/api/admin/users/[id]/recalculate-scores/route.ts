@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/api'
+import { requireManages } from '@/lib/api'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireAdmin()
+  const { id } = await params
+  const { error } = await requireManages(id)
   if (error) return error
 
-  const { id } = await params
   const admin = createAdminClient()
 
   const [{ data: tasks }, { data: scores }, { data: awards }] = await Promise.all([
@@ -19,10 +19,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireAdmin()
+  const { id } = await params
+  const { error } = await requireManages(id)
   if (error) return error
 
-  const { id } = await params
   const admin = createAdminClient()
 
   // Verify the user exists

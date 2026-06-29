@@ -8,7 +8,8 @@ export default async function PendingApprovalsPage() {
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const isAdmin = profile?.role === 'admin'
+  // Team leads get the same management view; the underlying APIs are dept-scoped.
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'team_lead'
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
