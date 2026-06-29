@@ -7,7 +7,8 @@ const createLeaveSchema = z.object({
   date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   leave_type:  z.enum(['sick', 'casual']),
   is_half_day: z.boolean().optional().default(false),
-  note:        z.string().max(200).nullable().optional(),
+  // Reason is mandatory when applying for leave.
+  note:        z.string().trim().min(1, 'A reason is required').max(200),
 })
 
 export async function GET(req: NextRequest) {

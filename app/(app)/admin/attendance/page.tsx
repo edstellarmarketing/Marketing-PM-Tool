@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, CalendarDays, List, Target } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, List, Target, BarChart3 } from 'lucide-react'
 import AdminAttendanceCalendar from '@/components/attendance/AdminAttendanceCalendar'
 import AdminAttendanceList from '@/components/attendance/AdminAttendanceList'
 import AdminPendingLeaves from '@/components/attendance/AdminPendingLeaves'
 import AwardBonusModal from '@/components/attendance/AwardBonusModal'
+import AttendanceUserSummary from '@/components/attendance/AttendanceUserSummary'
 import type { AttendanceLeave } from '@/types'
 
 interface LeaveWithProfile extends AttendanceLeave {
-  profiles: { id: string; full_name: string; avatar_url: string | null } | null
+  profiles: { id: string; full_name: string; avatar_url: string | null; department: string | null } | null
 }
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -26,7 +27,7 @@ export default function AdminAttendancePage() {
   const now = new Date()
   const [month,       setMonth]       = useState(now.getMonth() + 1)
   const [year,        setYear]        = useState(now.getFullYear())
-  const [view,        setView]        = useState<'calendar' | 'list'>('calendar')
+  const [view,        setView]        = useState<'calendar' | 'list' | 'summary'>('calendar')
   const [leaves,      setLeaves]      = useState<LeaveWithProfile[]>([])
   const [pendingAll,  setPendingAll]  = useState<LeaveWithProfile[]>([])
   const [members,     setMembers]     = useState<number>(0)
@@ -119,6 +120,12 @@ export default function AdminAttendancePage() {
               }`}>
               <List size={13} /> List
             </button>
+            <button onClick={() => setView('summary')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                view === 'summary' ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <BarChart3 size={13} /> Summary
+            </button>
           </div>
 
           {/* Award button */}
@@ -160,6 +167,11 @@ export default function AdminAttendancePage() {
         </div>
       ) : view === 'calendar' ? (
         <AdminAttendanceCalendar year={year} month={month} leaves={sortedLeaves} />
+      ) : view === 'summary' ? (
+        <AttendanceUserSummary
+          leaves={sortedLeaves}
+          monthLabel={`${MONTH_NAMES[month - 1].slice(0, 3)} ${year}`}
+        />
       ) : (
         <AdminAttendanceList
           leaves={sortedLeaves}

@@ -48,12 +48,12 @@ export async function GET(req: NextRequest) {
   const userIds = [...new Set(leaves.map((l: { user_id: string }) => l.user_id))]
   const { data: profiles, error: profilesError } = await adminClient
     .from('profiles')
-    .select('id, full_name, avatar_url')
+    .select('id, full_name, avatar_url, department')
     .in('id', userIds)
 
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
 
-  const profileMap = new Map((profiles ?? []).map((p: { id: string; full_name: string; avatar_url: string | null }) => [p.id, p]))
+  const profileMap = new Map((profiles ?? []).map((p: { id: string; full_name: string; avatar_url: string | null; department: string | null }) => [p.id, p]))
 
   const result = leaves.map((l: { user_id: string }) => ({
     ...l,
