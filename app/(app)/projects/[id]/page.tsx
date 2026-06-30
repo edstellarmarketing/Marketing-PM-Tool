@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound, redirect } from 'next/navigation'
 import ProjectDashboard from '@/components/projects/ProjectDashboard'
 import type { Project, ProjectTask, Profile, ProjectOwner, ProjectOwnerMember } from '@/types'
@@ -12,7 +13,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   const isAdmin = profile?.role === 'admin'
 
-  const { data: project } = await supabase
+  // Resolve the project creator first. Projects RLS is admin-only (migration
+  // 056), so a team-lead creator can't read it (or any project-scoped table)
+  // with their own client. Probe with the service-role client, then authorize
+  // here — the documented /api/admin/* pattern (see AGENTS.md).
+  const admin = createAdminClient()
+  const { data: probe } = await admin.from('projects').select('created_by').eq('id', id).single()
+  if (!probe) notFound()
+
+  // A team lead manages projects they created — same project powers as an admin,
+  // except deleting the project (admin-only).
+  const canManage = isAdmin || (profile?.role === 'team_lead' && probe.created_by === user.id)
+
+  // Authorized managers (admin or team-lead creator) read with the service-role
+  // client so RLS doesn't hide owner/task/member rows from a team-lead creator
+  // who isn't themselves a participant. Everyone else stays on the RLS-scoped
+  // client, so members see projects they participate in and others get nothing.
+  const db = canManage ? admin : supabase
+
+  const { data: project } = await db
     .from('projects')
     .select('*')
     .eq('id', id)
@@ -20,17 +39,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   if (!project) notFound()
 
-  // A team lead manages projects they created — same project powers as an admin,
-  // except deleting the project (admin-only).
-  const canManage = isAdmin || (profile?.role === 'team_lead' && project.created_by === user.id)
-
   // PostgREST caps a single response at 1000 rows. Page through so projects
   // with more than 1000 tasks render fully.
   const tasksPromise = (async (): Promise<ProjectTask[]> => {
     const PAGE = 1000
     const out: ProjectTask[] = []
     for (let from = 0; ; from += PAGE) {
-      const { data } = await supabase
+      const { data } = await db
         .from('project_tasks')
         .select('*')
         .eq('project_id', id)
@@ -46,8 +61,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   const [tasks, ownersRes, membersRes, allMembersRes] = await Promise.all([
     tasksPromise,
-    supabase.from('project_owners').select('*').eq('project_id', id).order('created_at', { ascending: true }),
-    supabase.from('project_owner_members').select('*'),
+    db.from('project_owners').select('*').eq('project_id', id).order('created_at', { ascending: true }),
+    db.from('project_owner_members').select('*'),
     supabase.from('profiles').select('id, full_name, avatar_url').order('full_name', { ascending: true }),
   ])
   const owners = (ownersRes.data ?? []) as ProjectOwner[]
