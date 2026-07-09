@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { X, Upload, Download, Check, AlertCircle } from 'lucide-react'
+import { X, Upload, Download, Check, AlertCircle, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import type { Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
 
@@ -176,7 +176,11 @@ function parseDate(raw: unknown): string | null {
 export default function BulkUploadTasksModal({ projectId, owner, owners = [], allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   // When a fixed owner is passed we lock to it; otherwise the user chooses one.
-  const [selectedOwnerId, setSelectedOwnerId] = useState<string>(owner?.id ?? '')
+  // If the project has exactly one department, pre-select it so single-team
+  // projects import without an extra click.
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>(
+    owner?.id ?? (owners.length === 1 ? owners[0].id : ''),
+  )
   const activeOwner = owner ?? owners.find(o => o.id === selectedOwnerId) ?? null
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
@@ -189,6 +193,9 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ inserted: number } | null>(null)
+  // Live import progress: how many tasks have been inserted so far, and the
+  // current phase label. Null when no import is running.
+  const [progress, setProgress] = useState<{ done: number; total: number; phase: string } | null>(null)
   // Per-row overrides for unmatched dependency owners. Keyed by row index in
   // rawRows, value is the chosen user id for the first unmatched name. ''
   // means "leave unassigned".
@@ -328,66 +335,93 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
     if (!activeOwner) { setError('Choose a destination department first.'); return }
     setImporting(true)
     setError(null)
+    setResult(null)
+    setProgress({ done: 0, total: importable.length, phase: 'Preparing…' })
 
-    // Resolve each row's Group name to a group_id, creating any group that
-    // doesn't already exist on the project (case-insensitive match).
-    const groupIdByName = new Map<string, string>()
-    groups.forEach(g => groupIdByName.set(g.name.trim().toLowerCase(), g.id))
-    const neededNames = Array.from(
-      new Set(
-        importable
-          .map(r => r.group_name?.trim())
-          .filter((n): n is string => !!n)
-          .map(n => n.toLowerCase()),
-      ),
-    ).filter(lower => !groupIdByName.has(lower))
-    // Preserve original casing for creation using the first row that used the name.
-    for (const lower of neededNames) {
-      const original = importable.find(r => r.group_name?.trim().toLowerCase() === lower)!.group_name!.trim()
-      const gRes = await fetch(`/api/projects/${projectId}/groups`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: original }),
-      })
-      if (gRes.ok) {
-        const g = await gRes.json()
-        groupIdByName.set(lower, g.id)
+    try {
+      // 1) Resolve each row's Group name to a group_id, creating any group that
+      // doesn't already exist on the project (case-insensitive match).
+      const groupIdByName = new Map<string, string>()
+      groups.forEach(g => groupIdByName.set(g.name.trim().toLowerCase(), g.id))
+      const neededNames = Array.from(
+        new Set(
+          importable
+            .map(r => r.group_name?.trim())
+            .filter((n): n is string => !!n)
+            .map(n => n.toLowerCase()),
+        ),
+      ).filter(lower => !groupIdByName.has(lower))
+      if (neededNames.length > 0) {
+        setProgress({ done: 0, total: importable.length, phase: 'Creating groups…' })
+        for (const lower of neededNames) {
+          // Preserve original casing using the first row that used the name.
+          const original = importable.find(r => r.group_name?.trim().toLowerCase() === lower)?.group_name?.trim()
+          if (!original) continue
+          const gRes = await fetch(`/api/projects/${projectId}/groups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: original }),
+          })
+          if (gRes.ok) {
+            const g = await gRes.json()
+            groupIdByName.set(lower, g.id)
+          }
+        }
       }
-    }
 
-    const res = await fetch(`/api/projects/${projectId}/owners/${activeOwner.id}/tasks/bulk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // `rows` is already sorted by S.No (with file order as the tiebreaker), so the
-        // server only has to insert in array order — the offset against the project's
-        // existing MAX(sort_order) is applied server-side.
-        rows: importable.map(r => ({
-          title: r.title,
-          group_id: r.group_name ? (groupIdByName.get(r.group_name.trim().toLowerCase()) ?? null) : null,
-          description: r.description,
-          status: r.status,
-          priority: r.priority,
-          progress: r.progress,
-          start_date: r.start_date,
-          due_date: r.due_date,
-          dependency_task: r.dependency_task,
-          dependency_details: r.dependency_details,
-          dependency_status: r.dependency_status,
-          dependency_owner_ids: r.dependency_owner_ids.length > 0 ? r.dependency_owner_ids : null,
-          final_comments: r.final_comments,
-          sort_order: r.sort_order,
-        })),
-      }),
-    })
-    setImporting(false)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      setError(typeof data.error === 'string' ? data.error : 'Failed to import tasks')
-      return
+      // 2) Insert in small sequential batches so the progress bar advances and
+      // no single request can stall the whole import. `importable` is already
+      // sorted by S.No, and each batch appends after the previous (server sets
+      // sort_order from MAX+1), so global order is preserved.
+      const payloadRows = importable.map(r => ({
+        title: r.title,
+        group_id: r.group_name ? (groupIdByName.get(r.group_name.trim().toLowerCase()) ?? null) : null,
+        description: r.description,
+        status: r.status,
+        priority: r.priority,
+        progress: r.progress,
+        start_date: r.start_date,
+        due_date: r.due_date,
+        dependency_task: r.dependency_task,
+        dependency_details: r.dependency_details,
+        dependency_status: r.dependency_status,
+        dependency_owner_ids: r.dependency_owner_ids.length > 0 ? r.dependency_owner_ids : null,
+        final_comments: r.final_comments,
+        sort_order: r.sort_order,
+      }))
+
+      const CHUNK = 25
+      let inserted = 0
+      for (let i = 0; i < payloadRows.length; i += CHUNK) {
+        const chunk = payloadRows.slice(i, i + CHUNK)
+        setProgress({ done: inserted, total: payloadRows.length, phase: 'Importing tasks…' })
+        const res = await fetch(`/api/projects/${projectId}/owners/${activeOwner.id}/tasks/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: chunk }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(
+            typeof data.error === 'string'
+              ? data.error
+              : `Failed to import (batch starting at row ${i + 1}). ${inserted} task${inserted === 1 ? '' : 's'} imported before the error.`,
+          )
+        }
+        const data = await res.json().catch(() => ({}))
+        inserted += typeof data.inserted === 'number' ? data.inserted : chunk.length
+        setProgress({ done: inserted, total: payloadRows.length, phase: 'Importing tasks…' })
+      }
+
+      setResult({ inserted })
+      // Show the success message briefly, then close + refresh the project.
+      setTimeout(() => { onImported() }, 1500)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to import tasks')
+    } finally {
+      setImporting(false)
+      setProgress(null)
     }
-    const data = await res.json()
-    setResult({ inserted: data.inserted ?? 0 })
   }
 
   return (
@@ -467,10 +501,29 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
             </p>
           )}
 
+          {/* Live progress bar while importing */}
+          {importing && progress && (
+            <div className="rounded-lg border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 px-3 py-2.5">
+              <div className="flex items-center justify-between text-xs text-blue-900 dark:text-blue-200 mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Loader2 size={13} className="animate-spin" />
+                  {progress.phase}
+                </span>
+                <span className="font-medium tabular-nums">{progress.done} / {progress.total}</span>
+              </div>
+              <div className="h-2 bg-blue-100 dark:bg-blue-900/60 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-200"
+                  style={{ width: `${progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {result && (
             <p className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-lg px-3 py-2">
               <Check size={14} className="mt-0.5 flex-shrink-0" />
-              Imported {result.inserted} task{result.inserted === 1 ? '' : 's'}.
+              Imported {result.inserted} task{result.inserted === 1 ? '' : 's'} successfully. Closing…
             </p>
           )}
 
@@ -629,8 +682,10 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
               title={!activeOwner ? 'Choose a destination department first' : undefined}
               className="flex items-center gap-2 px-5 py-2 text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Upload size={15} />
-              {importing ? 'Importing…' : `Import ${importable.length} task${importable.length === 1 ? '' : 's'}`}
+              {importing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+              {importing
+                ? (progress ? `Importing… ${progress.done}/${progress.total}` : 'Importing…')
+                : `Import ${importable.length} task${importable.length === 1 ? '' : 's'}`}
             </button>
           )}
         </div>
