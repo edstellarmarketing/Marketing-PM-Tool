@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Plus, FolderKanban, Calendar, ListChecks, Search, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import CreateProjectModal from './CreateProjectModal'
 import { formatProjectName } from '@/lib/utils'
-import { PROJECT_DOMAINS, type Project } from '@/types'
+import { PROJECT_DOMAINS, type Project, type ProjectStatus } from '@/types'
 
 interface ProjectStats {
   total: number
@@ -24,7 +24,17 @@ interface Props {
 }
 
 type ViewMode = 'cards' | 'list'
+type StatusFilter = 'all' | ProjectStatus
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
+
+// Status filter options. Default is 'active' (see statusFilter initial state).
+const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'all', label: 'All statuses' },
+]
 
 function formatDate(d: string | null) {
   if (!d) return '—'
@@ -49,6 +59,8 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [domainFilter, setDomainFilter] = useState<'all' | 'none' | Project['domain']>('all')
+  // Default to showing active projects only; users can switch or pick "All statuses".
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [view, setView] = useState<ViewMode>('cards')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0])
@@ -56,6 +68,7 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return projects.filter(p => {
+      if (statusFilter !== 'all' && p.status !== statusFilter) return false
       if (domainFilter === 'none' && p.domain) return false
       if (domainFilter !== 'all' && domainFilter !== 'none' && p.domain !== domainFilter) return false
       if (q) {
@@ -64,7 +77,7 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
       }
       return true
     })
-  }, [projects, search, domainFilter])
+  }, [projects, search, domainFilter, statusFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -78,11 +91,13 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
     queueMicrotask(() => setPage(safePage))
   }
 
-  const hasFilters = search.trim().length > 0 || domainFilter !== 'all'
+  // 'active' is the default status view, so it doesn't count as an applied filter.
+  const hasFilters = search.trim().length > 0 || domainFilter !== 'all' || statusFilter !== 'active'
 
   function clearFilters() {
     setSearch('')
     setDomainFilter('all')
+    setStatusFilter('active')
     setPage(1)
   }
 
@@ -140,6 +155,16 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
                 className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <select
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value as StatusFilter); setPage(1) }}
+              className="px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title="Filter by status"
+            >
+              {STATUS_FILTER_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
             <select
               value={domainFilter ?? 'all'}
               onChange={e => { setDomainFilter(e.target.value as typeof domainFilter); setPage(1) }}
