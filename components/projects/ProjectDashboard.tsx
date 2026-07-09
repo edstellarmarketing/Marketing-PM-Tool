@@ -1275,7 +1275,9 @@ function GroupRows({
         rows.length === 0 ? (
           <tr className="border-b border-gray-100 dark:border-gray-800">
             <td colSpan={colCount} className="px-8 py-3 text-xs text-gray-400 dark:text-gray-500 italic">
-              No tasks in this group{group ? '' : ''}.
+              {stats.total > 0
+                ? `No tasks match the current filter (${stats.total} hidden — switch the status filter to see them).`
+                : 'No tasks in this group yet.'}
             </td>
           </tr>
         ) : (
