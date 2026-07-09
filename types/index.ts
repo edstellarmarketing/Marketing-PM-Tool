@@ -280,6 +280,19 @@ export interface Project {
   updated_at: string
 }
 
+export interface ProjectDocument {
+  id: string
+  project_id: string
+  storage_path: string
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  uploaded_by: string | null
+  created_at: string
+  // Populated by the API when listing — short-lived signed URL to open the file.
+  viewUrl?: string | null
+}
+
 export interface ProjectTaskGroup {
   id: string
   project_id: string

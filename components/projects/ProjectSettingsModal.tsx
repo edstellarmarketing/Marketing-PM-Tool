@@ -1,18 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Save, Trash2, Settings as SettingsIcon, Mail, Send } from 'lucide-react'
-import { PROJECT_DOMAINS, type Project, type ProjectStatus, type ProjectDomain } from '@/types'
+import { X, Save, Trash2, Settings as SettingsIcon, Mail, Send, FileText, Upload } from 'lucide-react'
+import { PROJECT_DOMAINS, type Project, type ProjectStatus, type ProjectDomain, type ProjectDocument } from '@/types'
 
 interface Props {
   project: Project
+  documents: ProjectDocument[]
   onClose: () => void
   // Deleting a project is admin-only; team-lead managers can edit settings but not delete.
   canDelete?: boolean
 }
 
-export default function ProjectSettingsModal({ project, onClose, canDelete = true }: Props) {
+export default function ProjectSettingsModal({ project, documents, onClose, canDelete = true }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({
     name: project.name,
@@ -29,6 +30,44 @@ export default function ProjectSettingsModal({ project, onClose, canDelete = tru
   const [sendingTest, setSendingTest] = useState<null | 'admin' | 'owner'>(null)
   const [testStatus, setTestStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleUploadDocuments(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setError(null)
+    setUploadingDoc(true)
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch(`/api/projects/${project.id}/documents`, { method: 'POST', body: fd })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setError(typeof data.error === 'string' ? `${file.name}: ${data.error}` : `Failed to upload ${file.name}`)
+          break
+        }
+      }
+    } finally {
+      setUploadingDoc(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      router.refresh()
+    }
+  }
+
+  async function handleDeleteDocument(docId: string) {
+    setError(null)
+    setDeletingDocId(docId)
+    const res = await fetch(`/api/projects/${project.id}/documents/${docId}`, { method: 'DELETE' })
+    setDeletingDocId(null)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(typeof data.error === 'string' ? data.error : 'Failed to delete document')
+      return
+    }
+    router.refresh()
+  }
 
   async function handleSendTestEmail(kind: 'admin' | 'owner') {
     setError(null)
@@ -188,6 +227,64 @@ export default function ProjectSettingsModal({ project, onClose, canDelete = tru
               <option value="completed">Completed</option>
               <option value="archived">Archived</option>
             </select>
+          </div>
+
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+              <FileText size={14} className="text-blue-600" />
+              Project Documents
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+              Upload one or more HTML or Word (.doc/.docx) files. Each appears as a button beside the project name and opens in a new tab.
+            </p>
+
+            {documents.length > 0 && (
+              <ul className="space-y-1.5">
+                {documents.map(doc => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-2 text-sm bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5"
+                  >
+                    <FileText size={14} className="shrink-0 text-gray-400" />
+                    <a
+                      href={`/api/projects/${project.id}/documents/${doc.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {doc.file_name}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDocument(doc.id)}
+                      disabled={deletingDocId === doc.id || uploadingDoc}
+                      className="p-1 rounded text-gray-400 hover:text-red-600 disabled:opacity-50"
+                      title="Remove document"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".html,.htm,.doc,.docx,text/html,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={e => handleUploadDocuments(e.target.files)}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingDoc}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+            >
+              <Upload size={13} />
+              {uploadingDoc ? 'Uploading…' : 'Upload documents'}
+            </button>
           </div>
 
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 space-y-3">

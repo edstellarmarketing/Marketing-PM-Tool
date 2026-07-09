@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound, redirect } from 'next/navigation'
 import ProjectDashboard from '@/components/projects/ProjectDashboard'
-import type { Project, ProjectTask, Profile, ProjectOwner, ProjectOwnerMember, ProjectTaskGroup } from '@/types'
+import type { Project, ProjectTask, Profile, ProjectOwner, ProjectOwnerMember, ProjectTaskGroup, ProjectDocument } from '@/types'
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -59,16 +59,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     return out
   })()
 
-  const [tasks, ownersRes, membersRes, allMembersRes, groupsRes] = await Promise.all([
+  const [tasks, ownersRes, membersRes, allMembersRes, groupsRes, documentsRes] = await Promise.all([
     tasksPromise,
     db.from('project_owners').select('*').eq('project_id', id).order('created_at', { ascending: true }),
     db.from('project_owner_members').select('*'),
     supabase.from('profiles').select('id, full_name, avatar_url').order('full_name', { ascending: true }),
     db.from('project_task_groups').select('*').eq('project_id', id)
       .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+    // Read documents with the service-role client so participants (not just
+    // managers) see the document buttons — page access is already gated above.
+    admin.from('project_documents').select('*').eq('project_id', id)
+      .order('created_at', { ascending: true }),
   ])
   const owners = (ownersRes.data ?? []) as ProjectOwner[]
   const groups = (groupsRes.data ?? []) as ProjectTaskGroup[]
+  const documents = (documentsRes.data ?? []) as ProjectDocument[]
   const allMembers = (allMembersRes.data ?? []) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   const ownerMembers = (membersRes.data ?? []) as ProjectOwnerMember[]
 
@@ -96,6 +101,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       tasks={tasks}
       owners={ownersWithMembers}
       groups={groups}
+      documents={documents}
       allMembers={allMembers}
       isAdmin={canManage}
       canDelete={isAdmin}

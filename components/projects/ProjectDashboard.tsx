@@ -4,14 +4,14 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, FilterX, Layers, FolderPlus, MoreVertical, Upload,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, FilterX, Layers, FolderPlus, MoreVertical, Upload, FileText,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
 import ProjectSettingsModal from './ProjectSettingsModal'
 import BulkUploadTasksModal from './BulkUploadTasksModal'
 import { formatProjectName } from '@/lib/utils'
-import type { Project, ProjectTask, Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
+import type { Project, ProjectTask, Profile, ProjectOwner, ProjectTaskGroup, ProjectDocument } from '@/types'
 
 const UNGROUPED = '__ungrouped__'
 
@@ -20,6 +20,7 @@ interface Props {
   tasks: ProjectTask[]
   owners: ProjectOwner[]
   groups: ProjectTaskGroup[]
+  documents: ProjectDocument[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   // isAdmin here means "can manage this project" (admin or team-lead creator) —
   // it gates all project-management UI. canDelete is true admins only.
@@ -66,7 +67,7 @@ const priorityStyle: Record<string, string> = {
   critical: 'text-red-600',
 }
 
-export default function ProjectDashboard({ project, tasks, owners, groups, allMembers, isAdmin, canDelete = isAdmin }: Props) {
+export default function ProjectDashboard({ project, tasks, owners, groups, documents, allMembers, isAdmin, canDelete = isAdmin }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
@@ -567,7 +568,22 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{formatProjectName(project)}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{formatProjectName(project)}</h1>
+              {documents.map(doc => (
+                <a
+                  key={doc.id}
+                  href={`/api/projects/${project.id}/documents/${doc.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Open ${doc.file_name}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 max-w-[16rem]"
+                >
+                  <FileText size={13} className="shrink-0" />
+                  <span className="truncate">{doc.file_name}</span>
+                </a>
+              ))}
+            </div>
             {project.description && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">{project.description}</p>
             )}
@@ -1181,6 +1197,7 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
       {settingsOpen && (
         <ProjectSettingsModal
           project={project}
+          documents={documents}
           canDelete={canDelete}
           onClose={() => setSettingsOpen(false)}
         />
