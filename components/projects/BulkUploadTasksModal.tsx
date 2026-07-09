@@ -7,7 +7,11 @@ import type { Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
 
 interface Props {
   projectId: string
-  owner: ProjectOwner
+  // Fixed destination owner (per-owner entry point). When omitted, the user
+  // picks the destination department from `owners` inside the modal — this is
+  // the project-level import.
+  owner?: ProjectOwner
+  owners?: ProjectOwner[]
   groups?: ProjectTaskGroup[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   onClose: () => void
@@ -169,8 +173,11 @@ function parseDate(raw: unknown): string | null {
   return null
 }
 
-export default function BulkUploadTasksModal({ projectId, owner, allMembers, onClose, onImported }: Props) {
+export default function BulkUploadTasksModal({ projectId, owner, owners = [], allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // When a fixed owner is passed we lock to it; otherwise the user chooses one.
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>(owner?.id ?? '')
+  const activeOwner = owner ?? owners.find(o => o.id === selectedOwnerId) ?? null
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Row[]>([])
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>({
@@ -187,8 +194,9 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   // means "leave unassigned".
   const [depOwnerOverrides, setDepOwnerOverrides] = useState<Record<number, string>>({})
 
-  // Project owner is derived from the owner this upload is scoped to; we don't ask for it in the CSV.
-  const projectOwnerName = owner.user?.full_name ?? '—'
+  // Project owner is derived from the destination owner this upload is scoped to;
+  // we don't ask for it in the CSV.
+  const projectOwnerName = activeOwner?.user?.full_name ?? '—'
 
   function resolveProfile(raw: unknown): string | null {
     const s = String(raw ?? '').trim().toLowerCase()
@@ -317,6 +325,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
 
   async function handleImport() {
     if (importable.length === 0) return
+    if (!activeOwner) { setError('Choose a destination department first.'); return }
     setImporting(true)
     setError(null)
 
@@ -346,7 +355,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       }
     }
 
-    const res = await fetch(`/api/projects/${projectId}/owners/${owner.id}/tasks/bulk`, {
+    const res = await fetch(`/api/projects/${projectId}/owners/${activeOwner.id}/tasks/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -388,7 +397,9 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Bulk Upload Tasks</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Importing under <strong>{owner.user?.full_name ?? '—'}</strong> ({owner.department})
+              {activeOwner
+                ? <>Importing under <strong>{activeOwner.user?.full_name ?? '—'}</strong> ({activeOwner.department})</>
+                : 'Choose a destination department below, then upload your file.'}
             </p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -397,6 +408,26 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         </div>
 
         <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Destination department (project-level import only) */}
+          {!owner && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination department *</label>
+              <select
+                value={selectedOwnerId}
+                onChange={e => setSelectedOwnerId(e.target.value)}
+                className="w-full max-w-md px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select department…</option>
+                {owners.map(o => (
+                  <option key={o.id} value={o.id}>{o.department} — {o.user?.full_name ?? 'Unknown'}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                All imported tasks are assigned to this department/owner. Use the <strong>Group</strong> column in the file to organize them into phases.
+              </p>
+            </div>
+          )}
+
           {/* Step 1: File picker / template */}
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -594,7 +625,8 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
           ) : (
             <button
               onClick={handleImport}
-              disabled={importing || importable.length === 0 || !mapping.title}
+              disabled={importing || importable.length === 0 || !mapping.title || !activeOwner}
+              title={!activeOwner ? 'Choose a destination department first' : undefined}
               className="flex items-center gap-2 px-5 py-2 text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload size={15} />

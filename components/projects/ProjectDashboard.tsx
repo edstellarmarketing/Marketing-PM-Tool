@@ -4,11 +4,12 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, FilterX, Layers, FolderPlus, MoreVertical,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, FilterX, Layers, FolderPlus, MoreVertical, Upload,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
 import ProjectSettingsModal from './ProjectSettingsModal'
+import BulkUploadTasksModal from './BulkUploadTasksModal'
 import { formatProjectName } from '@/lib/utils'
 import type { Project, ProjectTask, Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
 
@@ -79,6 +80,7 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -826,6 +828,17 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
                 New group
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={() => setImportOpen(true)}
+                disabled={!canAddTask}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={canAddTask ? 'Bulk import tasks from CSV / Excel' : 'Add a project owner first'}
+              >
+                <Upload size={14} />
+                Import
+              </button>
+            )}
             <button
               onClick={() => setDrawerOpen(true)}
               disabled={!canAddTask}
@@ -1171,6 +1184,17 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
           project={project}
           canDelete={canDelete}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {importOpen && (
+        <BulkUploadTasksModal
+          projectId={project.id}
+          owners={owners}
+          groups={groups}
+          allMembers={allMembers}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); router.refresh() }}
         />
       )}
     </div>
