@@ -173,7 +173,7 @@ function parseDate(raw: unknown): string | null {
   return null
 }
 
-export default function BulkUploadTasksModal({ projectId, owner, owners = [], allMembers, onClose, onImported }: Props) {
+export default function BulkUploadTasksModal({ projectId, owner, owners = [], groups = [], allMembers, onClose, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   // When a fixed owner is passed we lock to it; otherwise the user chooses one.
   // If the project has exactly one department, pre-select it so single-team
@@ -332,7 +332,6 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
 
   async function handleImport() {
     if (importable.length === 0) return
-    if (!activeOwner) { setError('Choose a destination department first.'); return }
     setImporting(true)
     setError(null)
     setResult(null)
@@ -395,10 +394,10 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
       for (let i = 0; i < payloadRows.length; i += CHUNK) {
         const chunk = payloadRows.slice(i, i + CHUNK)
         setProgress({ done: inserted, total: payloadRows.length, phase: 'Importing tasks…' })
-        const res = await fetch(`/api/projects/${projectId}/owners/${activeOwner.id}/tasks/bulk`, {
+        const res = await fetch(`/api/projects/${projectId}/tasks/bulk-import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: chunk }),
+          body: JSON.stringify({ owner_id: activeOwner?.id ?? null, rows: chunk }),
         })
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -433,7 +432,7 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {activeOwner
                 ? <>Importing under <strong>{activeOwner.user?.full_name ?? '—'}</strong> ({activeOwner.department})</>
-                : 'Choose a destination department below, then upload your file.'}
+                : 'Importing unassigned tasks — only a Title is required. Assign departments, groups and dates later.'}
             </p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -445,19 +444,19 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
           {/* Destination department (project-level import only) */}
           {!owner && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination department *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination department (optional)</label>
               <select
                 value={selectedOwnerId}
                 onChange={e => setSelectedOwnerId(e.target.value)}
                 className="w-full max-w-md px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Select department…</option>
+                <option value="">Leave unassigned — assign later</option>
                 {owners.map(o => (
                   <option key={o.id} value={o.id}>{o.department} — {o.user?.full_name ?? 'Unknown'}</option>
                 ))}
               </select>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                All imported tasks are assigned to this department/owner. Use the <strong>Group</strong> column in the file to organize them into phases.
+                Optional. Pick a department to assign every imported task to it, or leave unassigned and sort them into departments and groups later. Only a task <strong>Title</strong> is required in the file.
               </p>
             </div>
           )}
@@ -678,8 +677,7 @@ export default function BulkUploadTasksModal({ projectId, owner, owners = [], al
           ) : (
             <button
               onClick={handleImport}
-              disabled={importing || importable.length === 0 || !mapping.title || !activeOwner}
-              title={!activeOwner ? 'Choose a destination department first' : undefined}
+              disabled={importing || importable.length === 0 || !mapping.title}
               className="flex items-center gap-2 px-5 py-2 text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {importing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}

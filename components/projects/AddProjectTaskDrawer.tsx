@@ -70,6 +70,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, groups = [], d
 
     const payload = {
       title: form.title.trim(),
+      owner_id: form.owner_id || null,
       group_id: form.group_id || null,
       description: form.description.trim() || null,
       priority: form.priority,

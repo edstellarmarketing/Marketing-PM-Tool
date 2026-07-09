@@ -831,9 +831,8 @@ export default function ProjectDashboard({ project, tasks, owners, groups, allMe
             {isAdmin && (
               <button
                 onClick={() => setImportOpen(true)}
-                disabled={!canAddTask}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={canAddTask ? 'Bulk import tasks from CSV / Excel' : 'Add a project owner first'}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                title="Bulk import tasks from CSV / Excel"
               >
                 <Upload size={14} />
                 Import

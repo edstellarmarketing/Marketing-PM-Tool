@@ -6,6 +6,7 @@ import { getAuthUser, getProfile, requireAdminOrTeamLead, canManageProject } fro
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  owner_id: z.string().uuid().nullable().optional(),
   group_id: z.string().uuid().nullable().optional(),
   description: z.string().max(5000).nullable().optional(),
   category: z.string().max(60).nullable().optional(),
@@ -66,6 +67,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .eq('project_id', taskRow.project_id)
       .maybeSingle()
     if (!group) return NextResponse.json({ error: 'Invalid group for this project' }, { status: 400 })
+  }
+
+  // Assigning/clearing the owner (department). A non-null owner must belong to
+  // this project; keep `category` in sync with the owner's department.
+  if (parsed.data.owner_id !== undefined) {
+    if (parsed.data.owner_id) {
+      const { data: owner } = await admin
+        .from('project_owners')
+        .select('id, department, project_id')
+        .eq('id', parsed.data.owner_id)
+        .maybeSingle()
+      if (!owner || owner.project_id !== taskRow.project_id) {
+        return NextResponse.json({ error: 'Invalid owner for this project' }, { status: 400 })
+      }
+      payload.category = owner.department
+    } else {
+      payload.category = null
+    }
   }
 
   const client = isManager ? admin : await createClient()
