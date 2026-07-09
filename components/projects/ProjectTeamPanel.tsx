@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { UserPlus, Plus, X, Trash2, Upload } from 'lucide-react'
 import BulkUploadTasksModal from './BulkUploadTasksModal'
-import type { Profile, ProjectOwner } from '@/types'
+import type { Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
 
 interface OwnerStat {
   total: number
@@ -17,6 +17,7 @@ interface OwnerStat {
 interface Props {
   projectId: string
   owners: ProjectOwner[]
+  groups?: ProjectTaskGroup[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   ownerStats?: Record<string, OwnerStat>
   isAdmin: boolean
@@ -39,7 +40,7 @@ function Avatar({ user, size = 6 }: { user: Pick<Profile, 'id' | 'full_name' | '
   )
 }
 
-export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerStats, isAdmin, onChange }: Props) {
+export default function ProjectTeamPanel({ projectId, owners, groups = [], allMembers, ownerStats, isAdmin, onChange }: Props) {
   const [showAddOwner, setShowAddOwner] = useState(owners.length === 0)
   const [newOwner, setNewOwner] = useState({ user_id: '', department: '' })
   const [memberSelectOwnerId, setMemberSelectOwnerId] = useState<string | null>(null)
@@ -300,6 +301,7 @@ export default function ProjectTeamPanel({ projectId, owners, allMembers, ownerS
           <BulkUploadTasksModal
             projectId={projectId}
             owner={o}
+            groups={groups}
             allMembers={allMembers}
             onClose={() => setBulkOwnerId(null)}
             onImported={() => { setBulkOwnerId(null); onChange() }}

@@ -4,18 +4,21 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ArrowUpDown, FilterX,
+  Plus, Search, Filter, ArrowLeft, TrendingUp, ListChecks, Loader2, AlertCircle, CheckCircle2, Calendar, Users, Pencil, Settings, Trash2, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, FilterX, Layers, FolderPlus, MoreVertical,
 } from 'lucide-react'
 import AddProjectTaskDrawer from './AddProjectTaskDrawer'
 import ProjectTeamPanel from './ProjectTeamPanel'
 import ProjectSettingsModal from './ProjectSettingsModal'
 import { formatProjectName } from '@/lib/utils'
-import type { Project, ProjectTask, Profile, ProjectOwner } from '@/types'
+import type { Project, ProjectTask, Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
+
+const UNGROUPED = '__ungrouped__'
 
 interface Props {
   project: Project
   tasks: ProjectTask[]
   owners: ProjectOwner[]
+  groups: ProjectTaskGroup[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   // isAdmin here means "can manage this project" (admin or team-lead creator) —
   // it gates all project-management UI. canDelete is true admins only.
@@ -62,10 +65,17 @@ const priorityStyle: Record<string, string> = {
   critical: 'text-red-600',
 }
 
-export default function ProjectDashboard({ project, tasks, owners, allMembers, isAdmin, canDelete = isAdmin }: Props) {
+export default function ProjectDashboard({ project, tasks, owners, groups, allMembers, isAdmin, canDelete = isAdmin }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [activeOwnerId, setActiveOwnerId] = useState<string>('all')
+  // Grouping: 'none' keeps the flat paginated table; 'group' renders collapsible
+  // sections per task group. Off by default so existing projects are unchanged.
+  const [groupBy, setGroupBy] = useState<'none' | 'group'>('none')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [groupMenuOpen, setGroupMenuOpen] = useState<string | null>(null)
+  const [moveMenuOpen, setMoveMenuOpen] = useState(false)
+  const [busyGroup, setBusyGroup] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0])
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -253,6 +263,295 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
   const allFilteredSelected = filteredCount > 0 && filtered.every(t => selectedIds.has(t.id))
   const someFilteredSelected = !allFilteredSelected && filtered.some(t => selectedIds.has(t.id))
 
+  // ----- Task groups -----
+  const groupById = useMemo(() => new Map(groups.map(g => [g.id, g])), [groups])
+
+  // Per-group progress from ALL tasks (not the current filter) so a group header
+  // shows the group's true completion. Keyed by group id, plus UNGROUPED.
+  const groupStats = useMemo(() => {
+    const map: Record<string, { total: number; completed: number; overdue: number; progress: number }> = {}
+    const ensure = (k: string) => (map[k] ??= { total: 0, completed: 0, overdue: 0, progress: 0 })
+    ensure(UNGROUPED)
+    groups.forEach(g => ensure(g.id))
+    tasks.forEach(t => {
+      const k = t.group_id && groupById.has(t.group_id) ? t.group_id : UNGROUPED
+      const s = ensure(k)
+      s.total += 1
+      if (t.status === 'completed') s.completed += 1
+      if (isOverdue(t, today)) s.overdue += 1
+    })
+    Object.values(map).forEach(s => { s.progress = s.total === 0 ? 0 : Math.round((s.completed / s.total) * 100) })
+    return map
+  }, [tasks, groups, groupById, today])
+
+  // Ordered sections for the grouped view: each group in sort order, then an
+  // "Ungrouped" bucket last. Rows within a section are attention-first, then the
+  // active sort order — matching the flat view's ordering. No pagination here:
+  // grouped mode is a deliberate whole-project overview.
+  const groupedSections = useMemo(() => {
+    const ordered = [...attentionRows, ...sortedRegularRows]
+    const byKey = new Map<string, ProjectTask[]>()
+    ordered.forEach(t => {
+      const k = t.group_id && groupById.has(t.group_id) ? t.group_id : UNGROUPED
+      const arr = byKey.get(k) ?? []
+      arr.push(t)
+      byKey.set(k, arr)
+    })
+    const sections: { key: string; group: ProjectTaskGroup | null; rows: ProjectTask[] }[] =
+      groups.map(g => ({ key: g.id, group: g, rows: byKey.get(g.id) ?? [] }))
+    const ungroupedRows = byKey.get(UNGROUPED) ?? []
+    if (ungroupedRows.length > 0 || groups.length === 0) {
+      sections.push({ key: UNGROUPED, group: null, rows: ungroupedRows })
+    }
+    return sections
+  }, [attentionRows, sortedRegularRows, groups, groupById])
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+
+  async function createGroup() {
+    const name = prompt('New group name')?.trim()
+    if (!name) return
+    setBusyGroup(true)
+    const res = await fetch(`/api/projects/${project.id}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    setBusyGroup(false)
+    if (!res.ok) { alert('Failed to create group'); return }
+    router.refresh()
+  }
+
+  async function renameGroup(g: ProjectTaskGroup) {
+    const name = prompt('Rename group', g.name)?.trim()
+    if (!name || name === g.name) return
+    setGroupMenuOpen(null)
+    const res = await fetch(`/api/projects/${project.id}/groups/${g.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!res.ok) { alert('Failed to rename group'); return }
+    router.refresh()
+  }
+
+  async function deleteGroup(g: ProjectTaskGroup) {
+    const n = groupStats[g.id]?.total ?? 0
+    if (!confirm(`Delete group "${g.name}"? ${n > 0 ? `Its ${n} task${n === 1 ? '' : 's'} will become Ungrouped (not deleted).` : ''}`)) return
+    setGroupMenuOpen(null)
+    const res = await fetch(`/api/projects/${project.id}/groups/${g.id}`, { method: 'DELETE' })
+    if (!res.ok) { alert('Failed to delete group'); return }
+    router.refresh()
+  }
+
+  // Reorder by swapping sort_order with the adjacent group.
+  async function reorderGroup(index: number, dir: -1 | 1) {
+    const target = index + dir
+    if (target < 0 || target >= groups.length) return
+    const a = groups[index]
+    const b = groups[target]
+    setGroupMenuOpen(null)
+    setBusyGroup(true)
+    await Promise.all([
+      fetch(`/api/projects/${project.id}/groups/${a.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_order: b.sort_order }),
+      }),
+      fetch(`/api/projects/${project.id}/groups/${b.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_order: a.sort_order }),
+      }),
+    ])
+    setBusyGroup(false)
+    router.refresh()
+  }
+
+  async function moveSelectedToGroup(groupId: string | null) {
+    if (selectedIds.size === 0) return
+    setMoveMenuOpen(false)
+    setBusyGroup(true)
+    const res = await fetch(`/api/projects/${project.id}/tasks/bulk-group`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds), group_id: groupId }),
+    })
+    setBusyGroup(false)
+    if (!res.ok) { alert('Failed to move tasks'); return }
+    setSelectedIds(new Set())
+    router.refresh()
+  }
+
+  function renderRow(t: ProjectTask) {
+    const overdue = isOverdue(t, today)
+    const attention = needsAttention(t, today)
+    const displayStatus = overdue ? 'overdue' : t.status
+    const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
+    const projectOwner = taskOwner?.user ?? null
+    const rowBg = selectedIds.has(t.id)
+      ? 'bg-blue-50/40 dark:bg-blue-950/20'
+      : attention
+        ? 'bg-red-100 dark:bg-red-950/50'
+        : 'bg-white dark:bg-gray-900'
+    const rowHover = attention
+      ? 'hover:bg-red-200/80 dark:hover:bg-red-900/50'
+      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+    const groupHover = attention
+      ? 'group-hover:bg-red-200/80 dark:group-hover:bg-red-900/50'
+      : 'group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50'
+    return (
+      <tr key={t.id} className={`group border-b border-gray-100 dark:border-gray-800 last:border-0 ${rowBg} ${rowHover}`}>
+        {isAdmin && (
+          <td className={`px-3 py-3 sticky left-0 z-10 ${rowBg} ${groupHover}`}>
+            <input
+              type="checkbox"
+              checked={selectedIds.has(t.id)}
+              onChange={() => toggleRow(t.id)}
+              className="rounded border-gray-300"
+            />
+          </td>
+        )}
+        <td
+          className={`px-4 py-3 sticky z-10 ${rowBg} ${groupHover} shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
+          style={{ left: isAdmin ? 56 : 0 }}
+        >
+          <button
+            onClick={() => setEditingTask(t)}
+            className="text-left font-medium text-gray-900 dark:text-white hover:text-blue-600 hover:underline focus:outline-none focus:text-blue-600"
+            title="Click to edit"
+          >
+            {t.title}
+          </button>
+          {t.category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.category}</p>}
+        </td>
+        <td className="px-4 py-3">
+          <span className={`inline-flex items-center gap-1 whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full border ${statusStyle[displayStatus] ?? statusStyle.pending}`}>
+            {displayStatus === 'completed' && <CheckCircle2 size={10} />}
+            {displayStatus === 'in_progress' ? 'In Progress' :
+              displayStatus === 'overdue' ? 'Overdue' :
+              displayStatus === 'completed' ? 'Completed' : 'Pending'}
+          </span>
+        </td>
+        <td className={`px-4 py-3 text-xs font-medium capitalize ${priorityStyle[t.priority]}`}>
+          {t.priority}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-600" style={{ width: `${t.progress}%` }} />
+            </div>
+            <span className="text-xs text-gray-500 dark:text-gray-400 w-9 text-right">{t.progress}%</span>
+          </div>
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+          {formatDate(t.start_date)}
+        </td>
+        <td className={`px-4 py-3 text-xs whitespace-nowrap ${overdue ? 'text-red-600 font-medium' : 'text-gray-600 dark:text-gray-300'}`}>
+          {formatDate(t.due_date)}
+        </td>
+        <td className="px-4 py-3">
+          {projectOwner ? (
+            <div className="flex items-center gap-2">
+              {projectOwner.avatar_url ? (
+                <img src={projectOwner.avatar_url} alt={projectOwner.full_name} className="w-6 h-6 rounded-full object-cover" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                  {initials(projectOwner.full_name)}
+                </div>
+              )}
+              <span className="text-xs text-gray-700 dark:text-gray-300">{projectOwner.full_name}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
+          {t.dependency_task ? t.dependency_task : <span className="text-gray-400">—</span>}
+        </td>
+        <td className="px-4 py-3 text-xs whitespace-nowrap">
+          {(() => {
+            const ids: string[] = (t.dependency_owner_ids && t.dependency_owner_ids.length > 0)
+              ? t.dependency_owner_ids
+              : (t.dependency_owner_id ? [t.dependency_owner_id] : [])
+            const deps = ids.map(id => membersById.get(id)).filter(Boolean) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
+            if (deps.length > 0) {
+              return (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {deps.map(dep => (
+                    <span key={dep.id} className="inline-flex items-center gap-1.5 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full">
+                      {dep.avatar_url ? (
+                        <img src={dep.avatar_url} alt={dep.full_name} className="w-4 h-4 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[8px] font-bold flex items-center justify-center">
+                          {initials(dep.full_name)}
+                        </div>
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">{dep.full_name}</span>
+                    </span>
+                  ))}
+                </div>
+              )
+            }
+            if (t.dependency_owner) return <span className="text-gray-700 dark:text-gray-300">{t.dependency_owner}</span>
+            return <span className="text-gray-400">—</span>
+          })()}
+        </td>
+        <td className="px-4 py-3 text-xs whitespace-nowrap">
+          {t.dependency_status ? (
+            <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+              {t.dependency_status}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs">
+          {t.dependency_details ? (
+            <div
+              className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
+              dangerouslySetInnerHTML={{ __html: t.dependency_details }}
+            />
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs">
+          {t.description ? (
+            <p className="line-clamp-3 text-gray-700 dark:text-gray-300 whitespace-pre-line">{t.description}</p>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs">
+          {t.final_comments ? (
+            <div
+              className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
+              dangerouslySetInnerHTML={{ __html: t.final_comments }}
+            />
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <button
+            onClick={() => setEditingTask(t)}
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+            title="Edit task"
+          >
+            <Pencil size={14} />
+          </button>
+        </td>
+      </tr>
+    )
+  }
+
+  const colCount = isAdmin ? 15 : 14
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -354,6 +653,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
             <ProjectTeamPanel
               projectId={project.id}
               owners={owners}
+              groups={groups}
               allMembers={allMembers}
               ownerStats={ownerStats}
               isAdmin={isAdmin}
@@ -494,6 +794,38 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                 </>
               )}
             </div>
+            {/* Group-by toggle: flat table vs collapsible groups */}
+            <div className="inline-flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setGroupBy('none')}
+                className={`px-2.5 py-1.5 text-xs font-medium ${groupBy === 'none' ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                title="Flat list"
+              >
+                None
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupBy('group')}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 dark:border-gray-700 ${groupBy === 'group' ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                title="Group tasks by group"
+              >
+                <Layers size={13} />
+                Groups
+              </button>
+            </div>
+            {isAdmin && groupBy === 'group' && (
+              <button
+                type="button"
+                onClick={createGroup}
+                disabled={busyGroup}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                title="Create a new group"
+              >
+                <FolderPlus size={14} />
+                New group
+              </button>
+            )}
             <button
               onClick={() => setDrawerOpen(true)}
               disabled={!canAddTask}
@@ -519,6 +851,44 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
               >
                 Clear
               </button>
+              <div className="relative">
+                <button
+                  onClick={() => setMoveMenuOpen(o => !o)}
+                  disabled={busyGroup}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-900 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
+                  aria-expanded={moveMenuOpen}
+                >
+                  <Layers size={13} />
+                  Move to group
+                  <ChevronDown size={12} />
+                </button>
+                {moveMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setMoveMenuOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-40 w-52 max-h-64 overflow-y-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1">
+                      {groups.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">No groups yet. Create one first.</p>
+                      )}
+                      {groups.map(g => (
+                        <button
+                          key={g.id}
+                          onClick={() => moveSelectedToGroup(g.id)}
+                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 truncate"
+                        >
+                          {g.name}
+                        </button>
+                      ))}
+                      <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                      <button
+                        onClick={() => moveSelectedToGroup(null)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        Remove from group
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 onClick={deleteSelected}
                 disabled={deletingBulk}
@@ -669,9 +1039,48 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
               </tr>
             </thead>
             <tbody>
-              {pageRows.length === 0 ? (
+              {groupBy === 'group' ? (
+                tasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={colCount} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      {!canAddTask
+                        ? 'Add at least one project owner before creating tasks.'
+                        : 'No tasks yet. Click "Add Task" to create the first one.'}
+                    </td>
+                  </tr>
+                ) : (
+                  groupedSections.map(section => {
+                    const collapsed = collapsedGroups.has(section.key)
+                    const gs = groupStats[section.key] ?? { total: 0, completed: 0, overdue: 0, progress: 0 }
+                    const groupIndex = section.group ? groups.findIndex(g => g.id === section.group!.id) : -1
+                    return (
+                      <GroupRows
+                        key={section.key}
+                        sectionKey={section.key}
+                        group={section.group}
+                        rows={section.rows}
+                        stats={gs}
+                        collapsed={collapsed}
+                        colCount={colCount}
+                        isAdmin={isAdmin}
+                        groupIndex={groupIndex}
+                        groupCount={groups.length}
+                        busy={busyGroup}
+                        menuOpen={groupMenuOpen === section.key}
+                        onToggleCollapsed={() => toggleGroupCollapsed(section.key)}
+                        onMenuOpenChange={open => setGroupMenuOpen(open ? section.key : null)}
+                        onRename={() => section.group && renameGroup(section.group)}
+                        onDelete={() => section.group && deleteGroup(section.group)}
+                        onMoveUp={() => reorderGroup(groupIndex, -1)}
+                        onMoveDown={() => reorderGroup(groupIndex, 1)}
+                        renderRow={renderRow}
+                      />
+                    )
+                  })
+                )
+              ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 15 : 14} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={colCount} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {!canAddTask
                       ? 'Add at least one project owner before creating tasks.'
                       : tasks.length === 0
@@ -680,175 +1089,14 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
                   </td>
                 </tr>
               ) : (
-                pageRows.map(t => {
-                  const overdue = isOverdue(t, today)
-                  const attention = needsAttention(t, today)
-                  const displayStatus = overdue ? 'overdue' : t.status
-                  const taskOwner = t.owner_id ? ownersById.get(t.owner_id) : null
-                  const projectOwner = taskOwner?.user ?? null
-                  const rowBg = selectedIds.has(t.id)
-                    ? 'bg-blue-50/40 dark:bg-blue-950/20'
-                    : attention
-                      ? 'bg-red-100 dark:bg-red-950/50'
-                      : 'bg-white dark:bg-gray-900'
-                  const rowHover = attention
-                    ? 'hover:bg-red-200/80 dark:hover:bg-red-900/50'
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-                  const groupHover = attention
-                    ? 'group-hover:bg-red-200/80 dark:group-hover:bg-red-900/50'
-                    : 'group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50'
-                  return (
-                    <tr key={t.id} className={`group border-b border-gray-100 dark:border-gray-800 last:border-0 ${rowBg} ${rowHover}`}>
-                      {isAdmin && (
-                        <td className={`px-3 py-3 sticky left-0 z-10 ${rowBg} ${groupHover}`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(t.id)}
-                            onChange={() => toggleRow(t.id)}
-                            className="rounded border-gray-300"
-                          />
-                        </td>
-                      )}
-                      <td
-                        className={`px-4 py-3 sticky z-10 ${rowBg} ${groupHover} shadow-[1px_0_0_0_rgb(229_231_235)] dark:shadow-[1px_0_0_0_rgb(31_41_55)]`}
-                        style={{ left: isAdmin ? 56 : 0 }}
-                      >
-                        <button
-                          onClick={() => setEditingTask(t)}
-                          className="text-left font-medium text-gray-900 dark:text-white hover:text-blue-600 hover:underline focus:outline-none focus:text-blue-600"
-                          title="Click to edit"
-                        >
-                          {t.title}
-                        </button>
-                        {t.category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.category}</p>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full border ${statusStyle[displayStatus] ?? statusStyle.pending}`}>
-                          {displayStatus === 'completed' && <CheckCircle2 size={10} />}
-                          {displayStatus === 'in_progress' ? 'In Progress' :
-                            displayStatus === 'overdue' ? 'Overdue' :
-                            displayStatus === 'completed' ? 'Completed' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className={`px-4 py-3 text-xs font-medium capitalize ${priorityStyle[t.priority]}`}>
-                        {t.priority}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-600" style={{ width: `${t.progress}%` }} />
-                          </div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 w-9 text-right">{t.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                        {formatDate(t.start_date)}
-                      </td>
-                      <td className={`px-4 py-3 text-xs whitespace-nowrap ${overdue ? 'text-red-600 font-medium' : 'text-gray-600 dark:text-gray-300'}`}>
-                        {formatDate(t.due_date)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {projectOwner ? (
-                          <div className="flex items-center gap-2">
-                            {projectOwner.avatar_url ? (
-                              <img src={projectOwner.avatar_url} alt={projectOwner.full_name} className="w-6 h-6 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
-                                {initials(projectOwner.full_name)}
-                              </div>
-                            )}
-                            <span className="text-xs text-gray-700 dark:text-gray-300">{projectOwner.full_name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
-                        {t.dependency_task ? t.dependency_task : <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
-                        {(() => {
-                          const ids: string[] = (t.dependency_owner_ids && t.dependency_owner_ids.length > 0)
-                            ? t.dependency_owner_ids
-                            : (t.dependency_owner_id ? [t.dependency_owner_id] : [])
-                          const deps = ids.map(id => membersById.get(id)).filter(Boolean) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
-                          if (deps.length > 0) {
-                            return (
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {deps.map(dep => (
-                                  <span key={dep.id} className="inline-flex items-center gap-1.5 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full">
-                                    {dep.avatar_url ? (
-                                      <img src={dep.avatar_url} alt={dep.full_name} className="w-4 h-4 rounded-full object-cover" />
-                                    ) : (
-                                      <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-[8px] font-bold flex items-center justify-center">
-                                        {initials(dep.full_name)}
-                                      </div>
-                                    )}
-                                    <span className="text-gray-700 dark:text-gray-300">{dep.full_name}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            )
-                          }
-                          if (t.dependency_owner) return <span className="text-gray-700 dark:text-gray-300">{t.dependency_owner}</span>
-                          return <span className="text-gray-400">—</span>
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
-                        {t.dependency_status ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
-                            {t.dependency_status}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {t.dependency_details ? (
-                          <div
-                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
-                            dangerouslySetInnerHTML={{ __html: t.dependency_details }}
-                          />
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {t.description ? (
-                          <p className="line-clamp-3 text-gray-700 dark:text-gray-300 whitespace-pre-line">{t.description}</p>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {t.final_comments ? (
-                          <div
-                            className="line-clamp-3 prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-invert"
-                            dangerouslySetInnerHTML={{ __html: t.final_comments }}
-                          />
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setEditingTask(t)}
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                          title="Edit task"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
+                pageRows.map(renderRow)
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
-        {filtered.length > 0 && (
+        {/* Pagination — grouped view shows all rows, so no pager there. */}
+        {groupBy === 'none' && filtered.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-3">
               <p>
@@ -895,6 +1143,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         <AddProjectTaskDrawer
           projectId={project.id}
           owners={owners}
+          groups={groups}
           defaultOwnerId={activeOwnerId !== 'all' ? activeOwnerId : (owners[0]?.id ?? null)}
           allMembers={allMembers}
           isAdmin={isAdmin}
@@ -907,6 +1156,7 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         <AddProjectTaskDrawer
           projectId={project.id}
           owners={owners}
+          groups={groups}
           defaultOwnerId={editingTask.owner_id}
           task={editingTask}
           allMembers={allMembers}
@@ -924,6 +1174,115 @@ export default function ProjectDashboard({ project, tasks, owners, allMembers, i
         />
       )}
     </div>
+  )
+}
+
+// A collapsible section header row + its task rows, for the grouped view.
+// Returns a fragment of <tr>s so it slots straight into the <tbody>.
+function GroupRows({
+  sectionKey, group, rows, stats, collapsed, colCount, isAdmin, groupIndex, groupCount, busy,
+  menuOpen, onToggleCollapsed, onMenuOpenChange, onRename, onDelete, onMoveUp, onMoveDown, renderRow,
+}: {
+  sectionKey: string
+  group: ProjectTaskGroup | null
+  rows: ProjectTask[]
+  stats: { total: number; completed: number; overdue: number; progress: number }
+  collapsed: boolean
+  colCount: number
+  isAdmin: boolean
+  groupIndex: number
+  groupCount: number
+  busy: boolean
+  menuOpen: boolean
+  onToggleCollapsed: () => void
+  onMenuOpenChange: (open: boolean) => void
+  onRename: () => void
+  onDelete: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  renderRow: (t: ProjectTask) => React.ReactNode
+}) {
+  const name = group ? group.name : 'Ungrouped'
+  return (
+    <>
+      <tr className="border-b border-gray-200 dark:border-gray-800">
+        <td colSpan={colCount} className="px-3 py-2 bg-gray-50 dark:bg-gray-950/60">
+          <div className="flex items-center gap-3 sticky left-0 w-fit">
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-white hover:text-blue-600"
+              title={collapsed ? 'Expand' : 'Collapse'}
+            >
+              {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+              {group?.color && (
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: group.color }} />
+              )}
+              <span>{name}</span>
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              {stats.completed}/{stats.total} done
+            </span>
+            <div className="flex items-center gap-1.5 w-32">
+              <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600" style={{ width: `${stats.progress}%` }} />
+              </div>
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 w-8 text-right">{stats.progress}%</span>
+            </div>
+            {stats.overdue > 0 && (
+              <span className="text-[11px] px-1.5 py-0.5 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded">
+                {stats.overdue} overdue
+              </span>
+            )}
+            {isAdmin && group && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => onMenuOpenChange(!menuOpen)}
+                  disabled={busy}
+                  className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded disabled:opacity-40"
+                  title="Group options"
+                  aria-expanded={menuOpen}
+                >
+                  <MoreVertical size={15} />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => onMenuOpenChange(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-40 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1">
+                      <button type="button" onClick={onRename} className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <Pencil size={13} /> Rename
+                      </button>
+                      <button type="button" onClick={onMoveUp} disabled={groupIndex <= 0} className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <ChevronUp size={13} /> Move up
+                      </button>
+                      <button type="button" onClick={onMoveDown} disabled={groupIndex < 0 || groupIndex >= groupCount - 1} className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <ChevronDown size={13} /> Move down
+                      </button>
+                      <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                      <button type="button" onClick={onDelete} className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40">
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </td>
+      </tr>
+      {!collapsed && (
+        rows.length === 0 ? (
+          <tr className="border-b border-gray-100 dark:border-gray-800">
+            <td colSpan={colCount} className="px-8 py-3 text-xs text-gray-400 dark:text-gray-500 italic">
+              No tasks in this group{group ? '' : ''}.
+            </td>
+          </tr>
+        ) : (
+          rows.map(renderRow)
+        )
+      )}
+    </>
   )
 }
 

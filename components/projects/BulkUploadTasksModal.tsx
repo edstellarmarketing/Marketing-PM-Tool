@@ -3,11 +3,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { X, Upload, Download, Check, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import type { Profile, ProjectOwner } from '@/types'
+import type { Profile, ProjectOwner, ProjectTaskGroup } from '@/types'
 
 interface Props {
   projectId: string
   owner: ProjectOwner
+  groups?: ProjectTaskGroup[]
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   onClose: () => void
   onImported: () => void
@@ -30,6 +31,7 @@ interface MappedRow {
   _depOwnerNames?: string[]
   _depOwnerUnmatched?: string[]
   final_comments: string | null
+  group_name: string | null
   sort_order: number | null
   _rowIndex: number
   _error?: string
@@ -37,7 +39,7 @@ interface MappedRow {
 
 const FIELD_KEYS = [
   'sort_order',
-  'title', 'description', 'status', 'priority', 'progress', 'start_date', 'due_date',
+  'title', 'group', 'description', 'status', 'priority', 'progress', 'start_date', 'due_date',
   'dependency_task', 'dependency_details', 'dependency_status', 'dependency_owner',
   'final_comments',
 ] as const
@@ -46,6 +48,7 @@ type FieldKey = typeof FIELD_KEYS[number]
 const FIELD_LABELS: Record<FieldKey, string> = {
   sort_order: 'S.No (order)',
   title: 'Title (required)',
+  group: 'Group / Phase',
   description: 'Description',
   status: 'Status',
   priority: 'Priority',
@@ -63,6 +66,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
 const HEADER_HINTS: Record<FieldKey, string[]> = {
   sort_order: ['s.no', 's no', 'sno', 'sl no', 'sl.no', 'sr no', 'sr.no', 'serial', 'serial no', 'serial number', '#', 'order', 'sort order', 'position', 'seq', 'sequence'],
   title: ['task name', 'task', 'title', 'name'],
+  group: ['group', 'phase', 'section', 'stage', 'milestone', 'group name', 'phase name', 'task group'],
   description: ['description', 'comments', 'notes', 'note', 'details', 'referance links', 'reference links', 'reference', 'url', 'link', 'page type'],
   status: ['status'],
   priority: ['priority'],
@@ -83,7 +87,7 @@ function normaliseHeader(h: string) {
 function autoMap(headers: string[]): Record<FieldKey, string | null> {
   const out: Record<FieldKey, string | null> = {
     sort_order: null,
-    title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
+    title: null, group: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
   }
@@ -171,7 +175,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const [rawRows, setRawRows] = useState<Row[]>([])
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>({
     sort_order: null,
-    title: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
+    title: null, group: null, description: null, status: null, priority: null, progress: null, start_date: null, due_date: null,
     dependency_task: null, dependency_details: null, dependency_status: null, dependency_owner: null,
     final_comments: null,
   })
@@ -222,7 +226,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
   const mappedRows = useMemo<MappedRow[]>(() => {
     if (!mapping.title) return []
     const mappedColumns = new Set(
-      [mapping.sort_order, mapping.title, mapping.description, mapping.status, mapping.priority,
+      [mapping.sort_order, mapping.title, mapping.group, mapping.description, mapping.status, mapping.priority,
         mapping.progress, mapping.start_date, mapping.due_date,
         mapping.dependency_task, mapping.dependency_details, mapping.dependency_status, mapping.dependency_owner,
         mapping.final_comments]
@@ -272,6 +276,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
       }
       const dependency_owner_ids = resolvedIds
       const final_comments = mapping.final_comments ? (String(row[mapping.final_comments] ?? '').trim() || null) : null
+      const group_name = mapping.group ? (String(row[mapping.group] ?? '').trim() || null) : null
       const sort_order = mapping.sort_order ? parseSortOrder(row[mapping.sort_order]) : null
 
       const err = !title ? 'Title is empty' : undefined
@@ -282,6 +287,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         _depOwnerNames: rawNames,
         _depOwnerUnmatched: unmatched,
         final_comments,
+        group_name,
         sort_order,
         _rowIndex: rowIndex,
         _error: err,
@@ -313,6 +319,33 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
     if (importable.length === 0) return
     setImporting(true)
     setError(null)
+
+    // Resolve each row's Group name to a group_id, creating any group that
+    // doesn't already exist on the project (case-insensitive match).
+    const groupIdByName = new Map<string, string>()
+    groups.forEach(g => groupIdByName.set(g.name.trim().toLowerCase(), g.id))
+    const neededNames = Array.from(
+      new Set(
+        importable
+          .map(r => r.group_name?.trim())
+          .filter((n): n is string => !!n)
+          .map(n => n.toLowerCase()),
+      ),
+    ).filter(lower => !groupIdByName.has(lower))
+    // Preserve original casing for creation using the first row that used the name.
+    for (const lower of neededNames) {
+      const original = importable.find(r => r.group_name?.trim().toLowerCase() === lower)!.group_name!.trim()
+      const gRes = await fetch(`/api/projects/${projectId}/groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: original }),
+      })
+      if (gRes.ok) {
+        const g = await gRes.json()
+        groupIdByName.set(lower, g.id)
+      }
+    }
+
     const res = await fetch(`/api/projects/${projectId}/owners/${owner.id}/tasks/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -322,6 +355,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
         // existing MAX(sort_order) is applied server-side.
         rows: importable.map(r => ({
           title: r.title,
+          group_id: r.group_name ? (groupIdByName.get(r.group_name.trim().toLowerCase()) ?? null) : null,
           description: r.description,
           status: r.status,
           priority: r.priority,
@@ -449,6 +483,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                     <tr className="text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">
                       <th className="px-2 py-1.5 font-medium">S.No</th>
                       <th className="px-2 py-1.5 font-medium">Title</th>
+                      <th className="px-2 py-1.5 font-medium">Group</th>
                       <th className="px-2 py-1.5 font-medium">Status</th>
                       <th className="px-2 py-1.5 font-medium">Priority</th>
                       <th className="px-2 py-1.5 font-medium">Progress</th>
@@ -471,6 +506,7 @@ export default function BulkUploadTasksModal({ projectId, owner, allMembers, onC
                         <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${r._error ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.sort_order ?? <span className="text-gray-400" title="No S.No in the file — will fall back to row order">{i + 1}*</span>}</td>
                           <td className="px-2 py-1.5 text-gray-900 dark:text-white">{r.title || <span className="text-red-500">missing</span>}</td>
+                          <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.group_name ?? <span className="text-gray-400">—</span>}</td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize whitespace-nowrap">{r.status.replace('_', ' ')}</td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300 capitalize">{r.priority}</td>
                           <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{r.progress}%</td>

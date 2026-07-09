@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/api'
 
 const createSchema = z.object({
   owner_id: z.string().uuid(),
+  group_id: z.string().uuid().nullable().optional(),
   title: z.string().min(1).max(200),
   description: z.string().max(5000).nullable().optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
@@ -42,6 +43,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid owner for this project' }, { status: 400 })
   }
 
+  // If a group is given, it must belong to this project.
+  if (parsed.data.group_id) {
+    const { data: group } = await supabase
+      .from('project_task_groups')
+      .select('id')
+      .eq('id', parsed.data.group_id)
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (!group) return NextResponse.json({ error: 'Invalid group for this project' }, { status: 400 })
+  }
+
   // Newly-created tasks land at the end of the project's order.
   const { data: maxRow } = await supabase
     .from('project_tasks')
@@ -57,6 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .insert({
       project_id: projectId,
       owner_id: owner.id,
+      group_id: parsed.data.group_id ?? null,
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       category: owner.department,

@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/api'
 
 const rowSchema = z.object({
   title: z.string().min(1).max(200),
+  group_id: z.string().uuid().nullable().optional(),
   description: z.string().max(8000).nullable().optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   status: z.enum(['pending', 'in_progress', 'completed']).default('pending'),
@@ -45,6 +46,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid owner for this project' }, { status: 400 })
   }
 
+  // Validate any referenced groups belong to this project; drop unknown ids to null.
+  const requestedGroupIds = Array.from(
+    new Set(parsed.data.rows.map(r => r.group_id).filter((g): g is string => !!g)),
+  )
+  const validGroupIds = new Set<string>()
+  if (requestedGroupIds.length > 0) {
+    const { data: groups } = await supabase
+      .from('project_task_groups')
+      .select('id')
+      .eq('project_id', projectId)
+      .in('id', requestedGroupIds)
+    ;(groups ?? []).forEach((g: { id: string }) => validGroupIds.add(g.id))
+  }
+
   // Bulk uploads append after the project's existing tasks: assign each incoming row a
   // monotonically increasing sort_order starting at MAX(existing) + 1, preserving the
   // order the client sent (which is already sorted by the S.No column in the file).
@@ -60,6 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const inserts = parsed.data.rows.map((r, i) => ({
     project_id: projectId,
     owner_id: owner.id,
+    group_id: r.group_id && validGroupIds.has(r.group_id) ? r.group_id : null,
     title: r.title,
     description: r.description ?? null,
     category: owner.department,

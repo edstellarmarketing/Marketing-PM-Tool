@@ -12,6 +12,8 @@ const createSchema = z.object({
   end_date: z.string().optional().nullable(),
   color: z.string().max(20).optional().nullable(),
   status: z.enum(['active', 'on_hold', 'completed', 'archived']).optional(),
+  // Optional task groups to seed the project with, in the given order.
+  groups: z.array(z.string().min(1).max(80)).max(50).optional(),
 })
 
 export async function GET() {
@@ -57,5 +59,19 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+
+  // Seed task groups if any were provided at creation. Deduped, trimmed, ordered.
+  const groupNames = Array.from(
+    new Set((parsed.data.groups ?? []).map(g => g.trim()).filter(Boolean)),
+  )
+  if (groupNames.length > 0) {
+    const { error: groupsError } = await supabase.from('project_task_groups').insert(
+      groupNames.map((name, i) => ({ project_id: data.id, name, sort_order: i + 1 })),
+    )
+    // A group-seed failure shouldn't fail the whole project creation; the user
+    // can add groups later from the project page.
+    if (groupsError) console.error('Failed to seed project task groups:', groupsError.message)
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

@@ -44,7 +44,7 @@ export async function GET() {
     'Title', 'Description', 'Status', 'Priority', 'Progress',
     'Start Date', 'Due Date',
     'Dependency Task', 'Dependency Details', 'Dependency Status', 'Dependency Owner',
-    'Final Comments',
+    'Final Comments', 'Group',
   ]
   const sampleRows: (string | number)[][] = [
     [
@@ -56,6 +56,7 @@ export async function GET() {
       'Need final logo + colour tokens before final pass',
       'In Review', sampleOwner1,
       'Awaiting brand sign-off; once approved, can wrap in a day.',
+      'Pre-Launch',
     ],
     [
       2,
@@ -63,6 +64,7 @@ export async function GET() {
       'Replace legacy footer with the new component',
       'Pending', 'Medium', 0, '6/10/2026', '6/20/2026',
       '', '', '', '', '',
+      'Pre-Launch',
     ],
     [
       3,
@@ -73,6 +75,7 @@ export async function GET() {
       'Awaiting final hero copy from content team',
       'Pending', sampleOwner2,
       'Blocked until content team finalises copy.',
+      'Pre-Launch',
     ],
     [
       4,
@@ -80,6 +83,7 @@ export async function GET() {
       'Apply remediations from the Q2 SEO audit',
       'Completed', 'Medium', 100, '5/20/2026', '5/30/2026',
       '', '', '', '', 'Done — all audit items addressed.',
+      'Launch Day',
     ],
     [
       5,
@@ -90,6 +94,7 @@ export async function GET() {
       'Backend needs to standardise validation error payload',
       'In Progress', samplePair,
       'Frontend pieces done; integration paused on backend contract.',
+      'Launch Day',
     ],
     [
       6,
@@ -97,6 +102,7 @@ export async function GET() {
       'Generate and ship the production sitemap and robots',
       'Pending', 'Low', 0, '6/15/2026', '6/25/2026',
       '', '', '', '', '',
+      'Post-Launch',
     ],
   ]
   const tasksSheet = XLSX.utils.aoa_to_sheet([headers, ...sampleRows])
@@ -115,6 +121,7 @@ export async function GET() {
     { wch: 18 }, // Dependency Status
     { wch: 20 }, // Dependency Owner
     { wch: 60 }, // Final Comments
+    { wch: 18 }, // Group
   ]
   XLSX.utils.book_append_sheet(wb, tasksSheet, 'Tasks')
 
@@ -154,6 +161,7 @@ export async function GET() {
     ['K. Dependency Status',               'No',        'One of: Pending / In Progress / In Review / Completed / Blocked.',                                                'Defaults to Pending. Only meaningful if I is set.'],
     ['L. Dependency Owner',                'No',        'Full name(s) of an active user. Single name or comma-separated for joint ownership. See Reference tab for the live list of valid names.', 'No owner attached. Unmatched names are flagged in the preview.'],
     ['M. Final Comments',                  'No',        'Wrap-up note added when the task closes. Often filled in when Status = Completed.',                               'No closing note on the imported task.'],
+    ['N. Group',                           'No',        'Group / phase this task belongs to (e.g. Pre-Launch, Launch Day). Rows sharing a name are grouped together; a name that doesn\'t exist yet is created automatically.', 'Task is left ungrouped.'],
     [''],
 
     ['NEED MORE DETAIL?'],
@@ -295,6 +303,17 @@ export async function GET() {
     ['',          'Done — all audit items addressed.'],
     ['',          'Awaiting brand sign-off; once approved, can wrap in a day.'],
     ['',          'Frontend pieces done; integration paused on backend contract.'],
+    [''],
+
+    ['─── N. GROUP  (optional, free text) ───'],
+    ['Guidance',  'Notes'],
+    ['Purpose',   'Organises tasks into phases/sections shown as collapsible groups in the project.'],
+    ['Auto-create', 'Rows sharing a group name are grouped together. A name that doesn\'t exist on the project yet is created automatically on import (case-insensitive match).'],
+    ['Blank',     'Task is imported without a group (shows under "Ungrouped").'],
+    ['Examples',  ''],
+    ['',          'Pre-Launch'],
+    ['',          'Launch Day'],
+    ['',          'Post-Launch'],
   ]
   const referenceSheet = XLSX.utils.aoa_to_sheet(reference)
   referenceSheet['!cols'] = [{ wch: 18 }, { wch: 80 }]

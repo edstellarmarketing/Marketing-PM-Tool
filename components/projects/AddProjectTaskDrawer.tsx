@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { X, Plus, Save, Trash2, ChevronDown } from 'lucide-react'
 import RichTextEditor from '@/components/notes/RichTextEditor'
-import type { Profile, ProjectOwner, ProjectTask } from '@/types'
+import type { Profile, ProjectOwner, ProjectTask, ProjectTaskGroup } from '@/types'
 
 function initialDependencyOwnerIds(task?: ProjectTask | null): string[] {
   if (!task) return []
@@ -15,7 +15,9 @@ function initialDependencyOwnerIds(task?: ProjectTask | null): string[] {
 interface Props {
   projectId: string
   owners: ProjectOwner[]
+  groups?: ProjectTaskGroup[]
   defaultOwnerId: string | null
+  defaultGroupId?: string | null
   task?: ProjectTask | null
   allMembers: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]
   isAdmin: boolean
@@ -23,11 +25,12 @@ interface Props {
   onCreated: () => void
 }
 
-export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId, task, allMembers, isAdmin, onClose, onCreated }: Props) {
+export default function AddProjectTaskDrawer({ projectId, owners, groups = [], defaultOwnerId, defaultGroupId = null, task, allMembers, isAdmin, onClose, onCreated }: Props) {
   const isEdit = !!task
 
   const [form, setForm] = useState({
     owner_id: task?.owner_id ?? defaultOwnerId ?? '',
+    group_id: task?.group_id ?? defaultGroupId ?? '',
     title: task?.title ?? '',
     description: task?.description ?? '',
     priority: (task?.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'critical',
@@ -67,6 +70,7 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
 
     const payload = {
       title: form.title.trim(),
+      group_id: form.group_id || null,
       description: form.description.trim() || null,
       priority: form.priority,
       status: form.status,
@@ -148,6 +152,22 @@ export default function AddProjectTaskDrawer({ projectId, owners, defaultOwnerId
               </p>
             )}
           </div>
+
+          {groups.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Group</label>
+              <select
+                value={form.group_id}
+                onChange={e => setForm(p => ({ ...p, group_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— No group —</option>
+                {groups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>

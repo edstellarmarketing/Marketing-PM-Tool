@@ -6,6 +6,7 @@ import { getAuthUser, getProfile, requireAdminOrTeamLead, canManageProject } fro
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  group_id: z.string().uuid().nullable().optional(),
   description: z.string().max(5000).nullable().optional(),
   category: z.string().max(60).nullable().optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
@@ -54,6 +55,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const isOwnRow = taskRow.created_by === user.id || taskRow.assignee_id === user.id
   if (!isManager && !isOwnRow) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // A non-null group must belong to the same project as the task.
+  if (parsed.data.group_id) {
+    const { data: group } = await admin
+      .from('project_task_groups')
+      .select('id')
+      .eq('id', parsed.data.group_id)
+      .eq('project_id', taskRow.project_id)
+      .maybeSingle()
+    if (!group) return NextResponse.json({ error: 'Invalid group for this project' }, { status: 400 })
   }
 
   const client = isManager ? admin : await createClient()
