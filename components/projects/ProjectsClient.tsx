@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, Calendar, ListChecks, Search, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import CreateProjectModal from './CreateProjectModal'
+import DeadlinePill from './DeadlinePill'
 import { formatProjectName } from '@/lib/utils'
 import { PROJECT_DOMAINS, type Project, type ProjectStatus } from '@/types'
 
@@ -228,13 +229,16 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
                     href={`/projects/${project.id}`}
                     className="group bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 shrink-0">
                         <FolderKanban size={20} />
                       </div>
-                      <span className={'text-xs px-2 py-0.5 rounded-full font-medium ' + statusPillClass(project.status)}>
-                        {project.status.replace('_', ' ')}
-                      </span>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <DeadlinePill endDate={project.end_date} status={project.status} />
+                        <span className={'text-xs px-2 py-0.5 rounded-full font-medium ' + statusPillClass(project.status)}>
+                          {project.status.replace('_', ' ')}
+                        </span>
+                      </div>
                     </div>
                     <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
                       {formatProjectName(project)}
