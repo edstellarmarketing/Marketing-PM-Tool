@@ -39,15 +39,32 @@ function clock(ms: number) {
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
 }
 
-export default function DeadlinePill({ endDate, status }: Props) {
-  // Seeded once at mount (Date.now() in the render body would break React's
+export interface DeadlineState {
+  /** Countdown applies: has an end date, and is neither completed nor archived. */
+  tracked: boolean
+  /** Deadline has passed on a project still expected to finish. */
+  passed: boolean
+  /** Today is the due date; the clock is ticking. */
+  isDueToday: boolean
+  /** Calendar days remaining; negative once overdue. */
+  days: number
+  /** Milliseconds to the deadline; negative once overdue. */
+  diff: number
+}
+
+/**
+ * One source of truth for deadline state, so the card tint, the header pill and
+ * the overdue banner can never disagree. Only ticks on the final day.
+ */
+export function useDeadline(endDate: string | null, status: ProjectStatus): DeadlineState {
+  // Seeded once at mount (Date.now() in a render body would break React's
   // purity rule); only the due-today branch advances it.
   const [now, setNow] = useState(() => Date.now())
 
-  const isTracked = Boolean(endDate) && status !== 'completed' && status !== 'archived'
+  const tracked = Boolean(endDate) && status !== 'completed' && status !== 'archived'
   const diff = endDate ? deadlineOf(endDate) - now : 0
   const days = endDate ? daysUntil(endDate, now) : 0
-  const isDueToday = isTracked && diff >= 0 && days === 0
+  const isDueToday = tracked && diff >= 0 && days === 0
 
   useEffect(() => {
     if (!isDueToday) return
@@ -61,13 +78,25 @@ export default function DeadlinePill({ endDate, status }: Props) {
     }
   }, [isDueToday])
 
-  if (!isTracked || !endDate) return null
+  return { tracked, passed: tracked && diff < 0, isDueToday, days, diff }
+}
+
+/** "3 days" / "1 day" — for the overdue banner copy. */
+export function overdueLabel(days: number) {
+  const n = -days
+  return `${n} ${n === 1 ? 'day' : 'days'}`
+}
+
+export default function DeadlinePill({ endDate, status }: Props) {
+  const { tracked, passed, isDueToday, days, diff } = useDeadline(endDate, status)
+
+  if (!tracked || !endDate) return null
 
   let cls: string
   let icon = <Timer size={12} />
   let label: string
 
-  if (diff < 0) {
+  if (passed) {
     cls = 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
     icon = <AlertTriangle size={12} />
     label = `${-days}d over`

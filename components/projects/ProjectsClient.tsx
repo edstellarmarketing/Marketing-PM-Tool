@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Plus, FolderKanban, Calendar, ListChecks, Search, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import CreateProjectModal from './CreateProjectModal'
-import DeadlinePill from './DeadlinePill'
+import DeadlinePill, { useDeadline } from './DeadlinePill'
 import { formatProjectName } from '@/lib/utils'
 import { PROJECT_DOMAINS, type Project, type ProjectStatus } from '@/types'
 
@@ -54,6 +54,78 @@ function statusPillClass(status: Project['status']) {
     case 'on_hold':   return 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
     default:          return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
   }
+}
+
+// Own component (not inline JSX) so each card can call useDeadline — hooks
+// cannot run inside a .map callback.
+function ProjectCard({ project, stats: s }: { project: Project; stats?: ProjectStats }) {
+  const { passed } = useDeadline(project.end_date, project.status)
+  const pct = progress(s)
+
+  return (
+    <Link
+      href={`/projects/${project.id}`}
+      className={
+        'group rounded-xl p-5 border hover:shadow-md transition-all ' +
+        (passed
+          ? 'bg-red-50 border-red-300 hover:border-red-500 dark:bg-red-950/30 dark:border-red-900 dark:hover:border-red-700'
+          : 'bg-white border-gray-200 hover:border-blue-500 dark:bg-gray-900 dark:border-gray-800 dark:hover:border-blue-500')
+      }
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div
+          className={
+            'w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ' +
+            (passed
+              ? 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400'
+              : 'bg-blue-50 text-blue-600 dark:bg-blue-950')
+          }
+        >
+          <FolderKanban size={20} />
+        </div>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <DeadlinePill endDate={project.end_date} status={project.status} />
+          <span className={'text-xs px-2 py-0.5 rounded-full font-medium ' + statusPillClass(project.status)}>
+            {project.status.replace('_', ' ')}
+          </span>
+        </div>
+      </div>
+      <h3
+        className={
+          'text-base font-semibold transition-colors ' +
+          (passed
+            ? 'text-red-900 group-hover:text-red-700 dark:text-red-100'
+            : 'text-gray-900 group-hover:text-blue-600 dark:text-white')
+        }
+      >
+        {formatProjectName(project)}
+      </h3>
+      {project.description && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{project.description}</p>
+      )}
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+          <span>Progress</span>
+          <span className="font-medium text-gray-900 dark:text-white">{pct}%</span>
+        </div>
+        <div className={'h-1.5 rounded-full overflow-hidden ' + (passed ? 'bg-red-100 dark:bg-red-950' : 'bg-gray-100 dark:bg-gray-800')}>
+          <div className={'h-full ' + (passed ? 'bg-red-600' : 'bg-blue-600')} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+        <span className="flex items-center gap-1">
+          <ListChecks size={13} />
+          {s?.total ?? 0} tasks
+        </span>
+        <span className="flex items-center gap-1">
+          <Calendar size={13} />
+          {formatDate(project.start_date)} – {formatDate(project.end_date)}
+        </span>
+      </div>
+    </Link>
+  )
 }
 
 export default function ProjectsClient({ projects, stats, isAdmin, canCreate = isAdmin }: Props) {
@@ -220,56 +292,9 @@ export default function ProjectsClient({ projects, stats, isAdmin, canCreate = i
             </div>
           ) : view === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pageRows.map(project => {
-                const s = stats[project.id]
-                const pct = progress(s)
-                return (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}`}
-                    className="group bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md transition-all"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950 flex items-center justify-center text-blue-600 shrink-0">
-                        <FolderKanban size={20} />
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-1.5">
-                        <DeadlinePill endDate={project.end_date} status={project.status} />
-                        <span className={'text-xs px-2 py-0.5 rounded-full font-medium ' + statusPillClass(project.status)}>
-                          {project.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                    </div>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
-                      {formatProjectName(project)}
-                    </h3>
-                    {project.description && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{project.description}</p>
-                    )}
-
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                        <span>Progress</span>
-                        <span className="font-medium text-gray-900 dark:text-white">{pct}%</span>
-                      </div>
-                      <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-600" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                      <span className="flex items-center gap-1">
-                        <ListChecks size={13} />
-                        {s?.total ?? 0} tasks
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar size={13} />
-                        {formatDate(project.start_date)} – {formatDate(project.end_date)}
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })}
+              {pageRows.map(project => (
+                <ProjectCard key={project.id} project={project} stats={stats[project.id]} />
+              ))}
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">

@@ -11,6 +11,8 @@ import ProjectTeamPanel from './ProjectTeamPanel'
 import ProjectSettingsModal from './ProjectSettingsModal'
 import BulkUploadTasksModal from './BulkUploadTasksModal'
 import { formatProjectName } from '@/lib/utils'
+import DeadlinePill from './DeadlinePill'
+import DeadlinePassedBanner from './DeadlinePassedBanner'
 import type { Project, ProjectTask, Profile, ProjectOwner, ProjectTaskGroup, ProjectDocument } from '@/types'
 
 const UNGROUPED = '__ungrouped__'
@@ -589,6 +591,7 @@ export default function ProjectDashboard({ project, tasks, owners, groups, docum
             )}
           </div>
           <div className="flex items-center gap-3 whitespace-nowrap">
+            <DeadlinePill endDate={project.end_date} status={project.status} />
             <div className="text-right text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
               <Calendar size={14} />
               <span>{formatDate(project.start_date)} – {formatDate(project.end_date)}</span>
@@ -605,6 +608,8 @@ export default function ProjectDashboard({ project, tasks, owners, groups, docum
           </div>
         </div>
       </div>
+
+      <DeadlinePassedBanner endDate={project.end_date} status={project.status} />
 
       {/* Overview cards */}
       <div>
