@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdminOrTeamLead, canManageProject } from '@/lib/api'
+import { requireProjectContributor } from '@/lib/api'
 
 // Project-level bulk import. Unlike the per-owner endpoint, the destination
 // owner (department) is OPTIONAL — omit it and tasks import unassigned, to be
@@ -32,11 +32,10 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params
-  const { profile, error } = await requireAdminOrTeamLead()
+  // Admins, the managing team lead, and any member involved in the project may
+  // bulk-import tasks (see requireProjectContributor / canContributeToProject).
+  const { profile, error } = await requireProjectContributor(projectId)
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!(await canManageProject(profile, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const body = await req.json()
   const parsed = bodySchema.safeParse(body)

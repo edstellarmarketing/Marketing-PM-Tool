@@ -79,6 +79,58 @@ export async function canManageProject(profile: Profile, projectId: string): Pro
   return !!data && data.created_by === profile.id
 }
 
+// Is `profile` a member "involved" in this project? True for a project owner
+// (a department head on the project) or a member listed under one of those
+// owners. Admins short-circuit to true. Service-role client — bypasses RLS by
+// design, so the route handler is the authorization boundary.
+export async function isProjectMember(profile: Profile, projectId: string): Promise<boolean> {
+  if (profile.role === 'admin') return true
+  const admin = createAdminClient()
+
+  const { data: owners } = await admin
+    .from('project_owners')
+    .select('id, user_id')
+    .eq('project_id', projectId)
+  const ownerRows = owners ?? []
+  if (ownerRows.some((o: { user_id: string }) => o.user_id === profile.id)) return true
+
+  const ownerIds = ownerRows.map((o: { id: string }) => o.id)
+  if (ownerIds.length === 0) return false
+  const { data: asMember } = await admin
+    .from('project_owner_members')
+    .select('id')
+    .eq('user_id', profile.id)
+    .in('owner_id', ownerIds)
+    .limit(1)
+  return (asMember?.length ?? 0) > 0
+}
+
+// Can `profile` contribute tasks to this project (e.g. bulk import, and the
+// group creation that import depends on)? Admins and the managing team lead
+// always can (see canManageProject); additionally any member involved in the
+// project may. Broader than canManageProject on purpose — contributing tasks is
+// not the same as managing the project.
+export async function canContributeToProject(profile: Profile, projectId: string): Promise<boolean> {
+  if (await canManageProject(profile, projectId)) return true
+  return isProjectMember(profile, projectId)
+}
+
+// Route guard for project-contribution endpoints. Unlike requireAdminOrTeamLead,
+// this does NOT reject members up front — any authenticated user is allowed
+// through iff they can contribute to the given project. Returns the caller's
+// profile on success (handlers use it for created_by, etc.).
+export async function requireProjectContributor(
+  projectId: string,
+): Promise<{ profile: Profile | null; error: NextResponse | null }> {
+  const { user, error } = await getAuthUser()
+  if (error || !user) return { profile: null, error: error! }
+  const profile = await getProfile(user.id)
+  if (!profile || !(await canContributeToProject(profile, projectId))) {
+    return { profile: null, error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+  }
+  return { profile, error: null }
+}
+
 // IDs of every user in a department. Returns [] for a falsy department, so an
 // `.in('user_id', ids)` filter naturally yields no rows (a team lead with no
 // department sees nothing). Service-role client — bypasses RLS by design.

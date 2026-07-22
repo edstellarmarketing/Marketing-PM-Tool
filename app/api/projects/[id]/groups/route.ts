@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAuthUser, requireAdminOrTeamLead, canManageProject } from '@/lib/api'
+import { getAuthUser, requireProjectContributor } from '@/lib/api'
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),
@@ -29,11 +29,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params
-  const { profile, error } = await requireAdminOrTeamLead()
+  // Project contributors (admins, managing team lead, involved members) can add
+  // groups — bulk import creates any groups its rows reference.
+  const { profile, error } = await requireProjectContributor(projectId)
   if (error || !profile) return error ?? NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!(await canManageProject(profile, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
