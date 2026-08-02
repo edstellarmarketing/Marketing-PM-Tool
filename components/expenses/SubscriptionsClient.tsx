@@ -9,6 +9,7 @@ import type { ExpenseLookups } from '@/types'
 
 export interface SubscriptionRow {
   id: string
+  ref: string | null
   name: string
   vendor_id: string | null
   billing_cycle: string
@@ -260,6 +261,7 @@ export default function SubscriptionsClient({ canManage }: { canManage: boolean 
             <table className="w-full text-sm">
               <thead className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
                 <tr>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">REF</th>
                   <th className="px-3 py-2 text-left font-semibold">SUBSCRIPTION</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">CYCLE</th>
                   <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">PRICE / CYCLE</th>
@@ -275,6 +277,9 @@ export default function SubscriptionsClient({ canManage }: { canManage: boolean 
                   const days = daysUntil(s.ends_on)
                   return (
                     <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-mono text-xs text-gray-400 select-all">{s.ref || '—'}</span>
+                      </td>
                       <td className="px-3 py-2.5 max-w-xs">
                         <p className="text-gray-900 dark:text-white truncate">{s.name}</p>
                         <p className="text-xs text-gray-400 truncate">

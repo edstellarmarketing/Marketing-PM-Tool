@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     ? { data: [], error: null }
     : await applyFilters(
         db.from('expenses').select(
-          `id, expense_date, amount_usd, tax_usd, total_usd, initial_price_usd,
+          `id, ref, expense_date, amount_usd, tax_usd, total_usd, initial_price_usd,
            category_id, backlink_type_id, vendor_id, subscription_id, team_id, vertical_id,
            link_url, link_site, link_rel, link_domain, payee, acquired_by, country,
            payment_status, payment_method, invoice_url, description, notes, meta,

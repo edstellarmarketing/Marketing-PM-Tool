@@ -9,7 +9,7 @@ import { friendlyDbError, subscriptionCreateSchema, validationResponse } from '@
 // charge is a deliberate entry via "log a charge" (decision 4).
 export const dynamic = 'force-dynamic'
 
-const SELECT = `id, name, vendor_id, billing_cycle, amount_usd, started_on, ends_on,
+const SELECT = `id, ref, name, vendor_id, billing_cycle, amount_usd, started_on, ends_on,
                 payment_method, status, owner_profile_id, owner_name, team_id, seats,
                 invoice_url, notes, created_at, updated_at`
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
   const { data, error: dbError } = await db
     .from('expense_subscriptions')
     .insert({ ...parsed.data, created_by: profile.id })
-    .select('id, name')
+    .select('id, ref, name')
     .single()
 
   if (dbError) return NextResponse.json({ error: friendlyDbError(dbError) }, { status: 400 })

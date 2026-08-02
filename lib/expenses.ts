@@ -183,7 +183,8 @@ export const EXPENSE_SORTABLE = new Set(['expense_date', 'amount_usd', 'total_us
 
 // Text columns the free-text box searches. Vendor/team/vertical are joins and
 // get their own dropdowns instead.
-const SEARCH_COLUMNS = ['description', 'notes', 'payee', 'acquired_by', 'link_url', 'link_site', 'country']
+// `ref` is included so pasting EXP-000123 from a spreadsheet finds its row.
+const SEARCH_COLUMNS = ['ref', 'description', 'notes', 'payee', 'acquired_by', 'link_url', 'link_site', 'country']
 
 const FILTER_COLUMNS = [
   ['category', 'category_id'],

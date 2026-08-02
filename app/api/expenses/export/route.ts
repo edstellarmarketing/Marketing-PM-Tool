@@ -17,6 +17,7 @@ const MAX_ROWS = 50_000
 
 interface Row {
   id: string
+  ref: string | null
   expense_date: string
   amount_usd: string | number
   tax_usd: string | number | null
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
   for (let offset = 0; ; offset += CHUNK) {
     const { data, error: e } = await applyExpenseFilters(
       db.from('expenses').select(
-        `id, expense_date, amount_usd, tax_usd, total_usd, initial_price_usd,
+        `id, ref, expense_date, amount_usd, tax_usd, total_usd, initial_price_usd,
          category_id, backlink_type_id, vendor_id, team_id, vertical_id, subscription_id,
          link_url, link_site, link_domain, link_rel, payee, acquired_by, country,
          payment_status, payment_method, invoice_url, description, notes, created_by, created_at`,
@@ -106,6 +107,9 @@ export async function GET(req: NextRequest) {
   // Names, not UUIDs — a spreadsheet full of ids is unusable outside the app.
   // Column order mirrors the ledger table so the export reads the same way.
   const sheetRows = rows.map(r => ({
+    // First column, and the key a future bulk import matches on: leave it
+    // untouched when editing, and never invent one for a new row.
+    Ref: r.ref ?? '',
     Date: r.expense_date,
     Category: cats.get(r.category_id ?? '') ?? '',
     Description: r.description ?? '',
@@ -134,7 +138,10 @@ export async function GET(req: NextRequest) {
 
   const ws = XLSX.utils.json_to_sheet(sheetRows)
   ws['!autofilter'] = { ref: ws['!ref'] ?? 'A1' }
+  // One width per column, in order. Ref is first, so this list starts with it —
+  // a short list silently shifts every later column's width onto its neighbour.
   ws['!cols'] = [
+    { wch: 12 }, // Ref
     { wch: 11 }, { wch: 20 }, { wch: 40 }, { wch: 22 }, { wch: 14 }, { wch: 12 },
     { wch: 13 }, { wch: 11 }, { wch: 13 }, { wch: 17 }, { wch: 10 }, { wch: 15 },
     { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 13 }, { wch: 30 },

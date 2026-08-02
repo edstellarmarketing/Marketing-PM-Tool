@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowDown, ArrowUp, Download, ExternalLink, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, Download, ExternalLink, FileText, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react'
 import Paginator from '@/components/ui/Paginator'
 import ExpenseForm, { emptyValues, type ExpenseFormValues } from '@/components/expenses/ExpenseForm'
+import ImportDialog from '@/components/expenses/ImportDialog'
 import { cn } from '@/lib/utils'
 import type { ExpenseLookups, ExpenseMeta, ExpensePaymentStatus } from '@/types'
 
 interface LedgerRow {
   id: string
+  ref: string | null
   expense_date: string
   amount_usd: number
   tax_usd: number | null
@@ -144,6 +146,7 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
 
   // null = closed. An object = open, with `initial` undefined for a new entry.
   const [editing, setEditing] = useState<{ initial?: ExpenseFormValues } | null>(null)
+  const [importing, setImporting] = useState(false)
   // Bumped after every save so the list refetches even when no filter changed.
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -258,6 +261,14 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
 
   return (
     <div className="space-y-4">
+      {importing && (
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          // Refetch rather than patching state: a bulk update can touch rows on
+          // other pages and change the footer totals.
+          onApplied={() => setReloadKey(k => k + 1)}
+        />
+      )}
       {editing && (
         <ExpenseForm
           // Remount when the target row changes; 'new' is stable across
@@ -282,7 +293,7 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search description, payee, link, notes…"
+              placeholder="Search ref, description, payee, link, notes…"
               className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 dark:text-white rounded-lg pl-9 pr-3 py-2 focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
             />
           </div>
@@ -382,6 +393,16 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
                 Export
               </a>
             )}
+            {!showDeleted && canManage && (
+              <button
+                onClick={() => setImporting(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                title="Update many entries at once from an edited export"
+              >
+                <Upload size={14} />
+                Import
+              </button>
+            )}
             {canManage && isOwner && (
               <button
                 onClick={() => { setShowDeleted(s => !s); setPage(1) }}
@@ -432,12 +453,14 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
             <table className="w-full text-sm">
               <thead className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
                 <tr>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">REF</th>
                   <SortHeader column="expense_date" label="DATE" sort={sort} dir={dir} onSort={toggleSort} />
                   <th className="px-3 py-2 text-left font-semibold">DETAIL</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">CATEGORY</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">VENDOR</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">TEAM / VERTICAL</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">STATUS</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">INVOICE</th>
                   <SortHeader column="total_usd" label="AMOUNT" className="text-right" sort={sort} dir={dir} onSort={toggleSort} />
                   <th className="px-2 py-2 w-8" aria-label="Actions" />
                 </tr>
@@ -445,6 +468,13 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {rows.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    {/* Stable handle for spreadsheet round-trips. Monospace so a
+                        transposed digit is easy to spot when comparing against
+                        an exported sheet. */}
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="font-mono text-xs text-gray-400 select-all">{r.ref || '—'}</span>
+                    </td>
+
                     <td className="px-3 py-2.5 whitespace-nowrap text-gray-600 dark:text-gray-300 tabular-nums">
                       {formatDate(r.expense_date)}
                     </td>
@@ -493,6 +523,29 @@ export default function LedgerClient({ canManage, isOwner }: { canManage: boolea
                       <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_CLS[r.payment_status])}>
                         {r.payment_status}
                       </span>
+                      {r.payment_method && (
+                        <span className="block text-xs text-gray-400">{r.payment_method.replace(/_/g, ' ')}</span>
+                      )}
+                    </td>
+
+                    {/* Its own column, headed INVOICE, so the field is visible as
+                        part of the table even while most rows are still empty —
+                        that absence is information: it shows what needs chasing. */}
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {r.invoice_url ? (
+                        <a
+                          href={r.invoice_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={r.invoice_url}
+                          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                        >
+                          <FileText size={13} />
+                          <span className="text-xs">view</span>
+                        </a>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600">—</span>
+                      )}
                     </td>
 
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
