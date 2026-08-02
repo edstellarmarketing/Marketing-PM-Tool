@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Trophy, Users, FileText, Award, LogOut, Menu, X, UserCircle, Settings, ClipboardCheck, NotebookPen, CalendarCheck, Mail, ListChecks, FolderKanban, CalendarRange, Megaphone } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Trophy, Users, FileText, Award, LogOut, Menu, X, UserCircle, Settings, ClipboardCheck, NotebookPen, CalendarCheck, Mail, ListChecks, FolderKanban, CalendarRange, Megaphone, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -52,6 +52,9 @@ interface SidebarProps {
   fullName: string
   designation?: string | null
   avatarUrl?: string | null
+  // Hidden modules sit outside the Role matrix (migration 071), so their
+  // visibility is passed in rather than derived from `role`.
+  hasExpenses?: boolean
 }
 
 const ROLE_BADGE: Record<Role, { label: string; className: string }> = {
@@ -64,7 +67,7 @@ function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-export default function Sidebar({ role, department, fullName, designation, avatarUrl }: SidebarProps) {
+export default function Sidebar({ role, department, fullName, designation, avatarUrl, hasExpenses = false }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -81,7 +84,7 @@ export default function Sidebar({ role, department, fullName, designation, avata
   const badge = ROLE_BADGE[role]
   const badgeLabel = role === 'team_lead' && department ? `${badge.label} · ${department}` : badge.label
 
-  const SidebarContent = () => (
+  const content = (
     <>
       <div className="px-4 py-4 border-b border-gray-800">
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Marketing PM</p>
@@ -124,6 +127,28 @@ export default function Sidebar({ role, department, fullName, designation, avata
             {item.label}
           </Link>
         ))}
+
+        {/* Hidden module. Rendered only for people holding an `expenses` grant —
+            everyone else never learns it exists. The tag says why it is not in
+            anyone else's sidebar. */}
+        {hasExpenses && (
+          <Link
+            href="/expenses"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+              pathname === '/expenses' || pathname.startsWith('/expenses/')
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white',
+            )}
+          >
+            <Wallet size={18} />
+            <span className="flex-1">Expenses</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 whitespace-nowrap">
+              Limited
+            </span>
+          </Link>
+        )}
 
         {manageItems.length > 0 && (
           <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
@@ -183,12 +208,12 @@ export default function Sidebar({ role, department, fullName, designation, avata
         'md:hidden fixed top-0 left-0 h-full w-60 bg-gray-900 text-white flex flex-col z-40 transform transition-transform duration-200',
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <SidebarContent />
+        {content}
       </aside>
 
       {/* Desktop sidebar — sticky so a tall right-side page doesn't push Sign out below the viewport */}
       <aside className="hidden md:flex w-60 sticky top-0 h-screen bg-gray-900 text-white flex-col flex-shrink-0 self-start">
-        <SidebarContent />
+        {content}
       </aside>
     </>
   )

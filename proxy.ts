@@ -26,7 +26,18 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/auth') && !pathname.startsWith('/api/')) {
+  // /expense-report/<token> is deliberately reachable without a session — it is
+  // the tokenised public spend report (migration 075). The token itself is the
+  // credential; the page validates it and shows aggregates only.
+  const isPublicExpenseReport = pathname.startsWith('/expense-report/')
+
+  if (
+    !user &&
+    !isPublicExpenseReport &&
+    !pathname.startsWith('/login') &&
+    !pathname.startsWith('/auth') &&
+    !pathname.startsWith('/api/')
+  ) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

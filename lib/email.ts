@@ -1,19 +1,54 @@
-const GAS_URL = process.env.GOOGLE_APPS_SCRIPT_EMAIL_URL
+export interface EmailResult {
+  ok: boolean
+  /** 'unconfigured' = no transport URL; 'transport' = the send was refused. */
+  reason?: 'unconfigured' | 'transport'
+  detail?: string
+}
 
+/**
+ * Send and report the outcome. Use this wherever the caller needs to know
+ * whether the message actually went out — scheduled digests especially, since
+ * nobody reads their logs.
+ *
+ * The Apps Script answers `200 {"success":false}` when it refuses a message, so
+ * `res.ok` on its own is not proof of delivery; the body has to be read too.
+ */
+export async function sendEmailChecked(to: string, subject: string, html: string): Promise<EmailResult> {
+  // Read at call time, not module load, so a dev-server env reload takes effect.
+  const gasUrl = process.env.GOOGLE_APPS_SCRIPT_EMAIL_URL
+  if (!gasUrl) return { ok: false, reason: 'unconfigured', detail: 'GOOGLE_APPS_SCRIPT_EMAIL_URL not set' }
+
+  let res: Response
+  try {
+    res = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, html }),
+    })
+  } catch (e) {
+    return { ok: false, reason: 'transport', detail: e instanceof Error ? e.message : 'network error' }
+  }
+
+  const text = await res.text().catch(() => '')
+  if (!res.ok) return { ok: false, reason: 'transport', detail: `HTTP ${res.status} ${text.slice(0, 200)}` }
+
+  try {
+    const body = JSON.parse(text) as { success?: boolean; error?: string }
+    if (body?.success === false) {
+      return { ok: false, reason: 'transport', detail: String(body.error ?? text).slice(0, 200) }
+    }
+  } catch {
+    // A non-JSON 200 means an older deployment; treat as sent, as before.
+  }
+  return { ok: true }
+}
+
+/** Fire-and-forget send: logs problems, never throws. */
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!GAS_URL) {
-    console.warn('GOOGLE_APPS_SCRIPT_EMAIL_URL not set — skipping email')
-    return
-  }
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to, subject, html }),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    console.error('Email send failed:', text)
-  }
+  const result = await sendEmailChecked(to, subject, html)
+  if (result.ok) return
+  if (result.reason === 'unconfigured') console.warn('GOOGLE_APPS_SCRIPT_EMAIL_URL not set — skipping email')
+  else console.error('Email send failed:', result.detail)
 }
 
 export function inviteEmailHtml(fullName: string, setPasswordUrl: string) {
@@ -487,7 +522,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function escapeHtml(s: string) {
+export function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
 }
 

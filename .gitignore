@@ -33,6 +33,26 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Credentials that do NOT start with ".env" and so slip past the pattern above.
+# env.txt holds the Supabase service_role key, which bypasses RLS entirely.
+env.txt
+*.env
+secrets*.txt
+
+# Source workbooks dropped in the repo root for the expenses backfill. These are
+# not just data: "Combined Live Backlinks.xlsx" carries ~810 rows of plaintext
+# account credentials (Mail Id / Password / User Name) and the Upwork sheet has
+# email/password pairs, so they must never enter version control — the importer
+# deliberately drops those columns.
+#
+# Root-scoped on purpose: public/templates/*.csv are shipped app assets and
+# Pricing/ has a tracked workbook, so a blanket *.xlsx/*.csv would fight them.
+/*.xlsx
+/*.xls
+/*.csv
+# Excel's lock files ("~$Book.xlsx")
+~$*
+
 # vercel
 .vercel
 

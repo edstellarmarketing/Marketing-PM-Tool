@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { hasModuleAccess } from '@/lib/api'
 import type { Role } from '@/types'
 import Sidebar from '@/components/shared/Sidebar'
 import NotificationsPanel from '@/components/shared/NotificationsPanel'
@@ -28,9 +29,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const avatarUrl = profile?.avatar_url ?? null
   const isManager = role === 'admin' || role === 'team_lead'
 
+  // Hidden modules are not part of the Role matrix, so the sidebar cannot infer
+  // them — it has to be told. Only grant holders get the entry, which is what
+  // keeps the module invisible to everyone else.
+  const hasExpenses = await hasModuleAccess(user.id, 'expenses')
+
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Sidebar role={role} department={department} fullName={fullName} designation={designation} avatarUrl={avatarUrl} />
+      <Sidebar
+        role={role}
+        department={department}
+        fullName={fullName}
+        designation={designation}
+        avatarUrl={avatarUrl}
+        hasExpenses={hasExpenses}
+      />
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 md:px-6 gap-4 pl-14 md:pl-6">

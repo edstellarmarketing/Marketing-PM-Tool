@@ -1,5 +1,188 @@
 export type Role = 'admin' | 'team_lead' | 'member'
 
+// Slug of a hidden module (migration 071). Hidden modules sit outside the Role
+// matrix: access comes only from an explicit `module_access` row, so an admin
+// does not get in by being an admin. A literal union on purpose — a typo'd key
+// must fail at compile time, not silently deny access at runtime.
+export type ModuleKey = 'expenses'
+
+export interface ModuleAccess {
+  id: string
+  user_id: string
+  module_key: ModuleKey
+  granted_by: string | null
+  granted_at: string
+  note: string | null
+}
+
+// ─── Expenses module (hidden; migration 072) ─────────────────────────────────
+// Mirrors the SQL enums. Keep in step with the migration — these unions are the
+// only compile-time check that a value is legal.
+
+export type ExpensePaymentStatus = 'paid' | 'pending' | 'refunded' | 'free'
+export type ExpensePaymentMethod = 'auto_pay' | 'manual' | 'link_exchange'
+export type ExpenseBillingCycle = 'monthly' | 'yearly' | 'credits' | 'one_time' | 'custom'
+export type ExpenseSubscriptionStatus = 'active' | 'cancelled' | 'expired'
+// 'text_mention' covers the source sheet's "No Link" and "No Hyperlink" — an
+// unlinked brand mention.
+export type ExpenseLinkRel = 'dofollow' | 'nofollow' | 'text_mention'
+
+// Every expense lookup has the same shape. `is_active` retires an entry without
+// deleting it, so historical rows pointing at it still resolve.
+export interface ExpenseLookup {
+  id: string
+  name: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface ExpenseCategory extends ExpenseLookup {
+  slug: string
+  sort_order: number
+}
+
+// The five lookups a form or filter bar needs, fetched in one call.
+export interface ExpenseLookups {
+  categories: ExpenseCategory[]
+  teams: ExpenseLookup[]
+  verticals: ExpenseLookup[]
+  vendors: ExpenseLookup[]
+  backlinkTypes: ExpenseLookup[]
+}
+
+// Category-specific fields. Deliberately loose: `meta` is the long tail that
+// only matters to one category. Promote a key to a real column once it needs
+// filtering or aggregation. Never credentials.
+export interface ExpenseMeta {
+  // Paid Links / HARO Links
+  da?: number
+  pa?: number
+  ss?: number
+  traffic?: string
+  da_range?: string
+  target_page?: string
+  target_keyword?: string
+  semrush_detected?: boolean
+  search_console_detected?: boolean
+  // GMB Review
+  reviews_count?: number
+  // Paid Ads — historical rows are campaign × month aggregates, so the original
+  // period is preserved even though expense_date is a single day.
+  campaign?: string
+  campaign_status?: string
+  ad_strategy?: string
+  period_start?: string
+  period_end?: string
+  // Content Writer
+  article_title?: string
+  article_cluster?: string
+  contract_status?: string
+  article_status?: string
+  doc_url?: string
+  live_url?: string
+  // Courses
+  course_name?: string
+  set?: string
+  [key: string]: unknown
+}
+
+export interface ExpenseSubscription {
+  id: string
+  name: string
+  vendor_id: string | null
+  billing_cycle: ExpenseBillingCycle
+  // List price PER CYCLE — never sum this across rows with different cycles.
+  amount_usd: number | null
+  started_on: string | null
+  ends_on: string | null
+  payment_method: ExpensePaymentMethod | null
+  status: ExpenseSubscriptionStatus
+  owner_profile_id: string | null
+  owner_name: string | null
+  team_id: string | null
+  seats: number | null
+  invoice_url: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  deleted_by: string | null
+}
+
+export interface Expense {
+  id: string
+  expense_date: string
+  // Net of tax. `tax_usd` null means "not recorded", not "zero tax".
+  amount_usd: number
+  tax_usd: number | null
+  // Generated in SQL: amount_usd + coalesce(tax_usd, 0). Read-only.
+  total_usd: number
+  initial_price_usd: number | null
+  category_id: string
+  backlink_type_id: string | null
+  vendor_id: string | null
+  subscription_id: string | null
+  team_id: string | null
+  vertical_id: string | null
+  link_url: string | null
+  link_site: string | null
+  link_rel: ExpenseLinkRel | null
+  // Generated in SQL from link_site/link_url. Read-only; powers duplicate
+  // detection, and is normalised identically for the form and the importer.
+  link_domain: string | null
+  payee: string | null
+  // Who sourced it internally. The backlinks sheet's "Team" column is people,
+  // not teams — it lands here, never on team_id.
+  acquired_by: string | null
+  country: string | null
+  payment_status: ExpensePaymentStatus
+  payment_method: ExpensePaymentMethod | null
+  invoice_url: string | null
+  description: string | null
+  notes: string | null
+  meta: ExpenseMeta
+  // Null once the entering account is removed — the row survives, the
+  // attribution does not.
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  deleted_by: string | null
+}
+
+// One row of the dashboard's month × category matrix
+// (view `expense_monthly_totals`).
+export interface ExpenseMonthlyTotal {
+  year: number
+  month: number
+  category_id: string
+  category_name: string
+  category_sort_order: number
+  net_usd: number
+  tax_usd: number
+  total_usd: number
+  entry_count: number
+}
+
+// Duplicate-warning payload (expenses.md §6.3). Advisory only — the form warns
+// and still saves.
+export interface ExpenseDuplicateMatch {
+  id: string
+  expense_date: string
+  amount_usd: number
+  link_url: string | null
+  link_domain: string | null
+  vertical_name: string | null
+  backlink_type_name: string | null
+  created_by_name: string | null
+}
+
+export interface ExpenseDuplicates {
+  exact: ExpenseDuplicateMatch[]
+  domain: ExpenseDuplicateMatch[]
+}
+
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
 
 export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked'
